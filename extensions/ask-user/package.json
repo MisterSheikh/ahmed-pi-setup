@@ -1,0 +1,11 @@
+{
+  "name": "ask-user",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "effect": "4.0.0-rc.110"
+  }
+}

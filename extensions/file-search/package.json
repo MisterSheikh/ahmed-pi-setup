@@ -1,0 +1,20 @@
+{
+  "name": "file-search",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit -p .",
+    "format": "prettier --write \"**/*.{ts,json}\"",
+    "format:check": "prettier --check \"**/*.{ts,json}\"",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.110",
+    "effect": "4.0.0-rc.110"
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.0.0-rc.110",
+    "vitest": "4.1.11"
+  }
+}

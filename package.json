@@ -1,0 +1,21 @@
+{
+  "name": "ahmed-pi-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "for d in subagents background-terminals file-search ask-user summaries model-info git-info ui-customization; do npm --prefix extensions/$d run check || exit 1; done",
+    "test": "for d in subagents background-terminals file-search summaries git-info; do npm --prefix extensions/$d run test || exit 1; done",
+    "format": "prettier --write \"extensions/**/*.{ts,json}\" package.json tsconfig.json",
+    "format:check": "prettier --check \"extensions/**/*.{ts,json}\" package.json tsconfig.json"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@earendil-works/pi-tui": "0.84.2",
+    "@effect/tsgo": "0.36.5",
+    "@types/node": "26.2.0",
+    "prettier": "3.9.6",
+    "typebox": "1.3.7",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,17 @@
+# Credentials and private configuration
+auth.json
+.env
+.env.*
+trust.json
+models*.json
+*.private.json
+
+# Pi runtime state
+sessions/
+workflows/
+bin/
+
+# Installed dependencies and generated files
+node_modules/
+*.log
+.DS_Store
