@@ -1,8 +1,0 @@
-{
-  "name": "ui-customization",
-  "scripts": {
-    "check": "tsc --noEmit -p ."
-  },
-  "type": "module",
-  "private": true
-}

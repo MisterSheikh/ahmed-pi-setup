@@ -19,5 +19,6 @@
   "transport": "auto",
   "markdown": {
     "mermaid": "streaming"
-  }
+  },
+  "treeFilterMode": "default"
 }

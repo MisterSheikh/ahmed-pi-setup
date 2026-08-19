@@ -34,7 +34,7 @@ import type {
   TranscriptPart,
 } from "../domain.ts";
 import { SendError, SpawnError } from "../domain.ts";
-import { createToolCallTimeoutGuard } from "../../../shared/tool-call-timeout.ts";
+import { createToolCallTimeoutGuard } from "./tool-call-timeout.ts";
 
 const CHILD_SHUTDOWN_TIMEOUT_MS = 5_000;
 
