@@ -5,6 +5,7 @@ import { DEFAULT_SUMMARY_CONFIG, parseSummaryConfig } from "./src/config.ts";
 test("summary config defaults to Codex Luna at medium reasoning", () => {
   assert.deepEqual(parseSummaryConfig(undefined), DEFAULT_SUMMARY_CONFIG);
   assert.deepEqual(DEFAULT_SUMMARY_CONFIG, {
+    enabled: true,
     provider: "openai-codex",
     model: "gpt-5.6-luna",
     reasoning: "medium",
@@ -19,9 +20,25 @@ test("summary config accepts valid private overrides and rejects partial corrupt
       reasoning: "high",
     }),
     {
+      enabled: true,
       provider: "anthropic",
       model: "claude-sonnet",
       reasoning: "high",
+    },
+  );
+
+  assert.deepEqual(
+    parseSummaryConfig({
+      enabled: false,
+      provider: "openai-codex",
+      model: "gpt-5.6-luna",
+      reasoning: "medium",
+    }),
+    {
+      enabled: false,
+      provider: "openai-codex",
+      model: "gpt-5.6-luna",
+      reasoning: "medium",
     },
   );
 

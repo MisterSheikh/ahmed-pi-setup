@@ -7,8 +7,27 @@ export const TRANSCRIPT_MAX_BYTES = 48_000;
 const SECRET_KEY_PATTERN =
   /(?:api[_-]?key|access[_-]?key|authorization|cookie|credential|password|passwd|private[_-]?key|secret|token)/i;
 
+export const RUN_MARKER_ENTRY_TYPE = "summary-run-boundary";
+
 export interface RunMarker {
   readonly baselineLeafId: string | null;
+}
+
+export interface CompletedRun extends RunMarker {
+  readonly endLeafId: string;
+}
+
+function isCompletedRun(value: unknown): value is CompletedRun {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.baselineLeafId === null ||
+      typeof candidate.baselineLeafId === "string") &&
+    typeof candidate.endLeafId === "string" &&
+    candidate.endLeafId.length > 0
+  );
 }
 
 export function createRunBoundary() {
@@ -38,6 +57,36 @@ export function getRunEntries(
     (entry) => entry.id === baselineLeafId,
   );
   return baselineIndex === -1 ? [] : branch.slice(baselineIndex + 1);
+}
+
+export function getCompletedRunEntries(
+  branch: readonly SessionEntry[],
+  run: CompletedRun,
+) {
+  const baselineIndex =
+    run.baselineLeafId === null
+      ? -1
+      : branch.findIndex((entry) => entry.id === run.baselineLeafId);
+  if (run.baselineLeafId !== null && baselineIndex === -1) return [];
+
+  const startIndex = baselineIndex + 1;
+  const endIndex = branch.findIndex((entry) => entry.id === run.endLeafId);
+  if (endIndex < startIndex) return [];
+  return branch.slice(startIndex, endIndex + 1);
+}
+
+export function findLatestCompletedRun(branch: readonly SessionEntry[]) {
+  for (let index = branch.length - 1; index >= 0; index -= 1) {
+    const entry = branch[index]!;
+    if (
+      entry.type === "custom" &&
+      entry.customType === RUN_MARKER_ENTRY_TYPE &&
+      isCompletedRun(entry.data)
+    ) {
+      return entry.data;
+    }
+  }
+  return undefined;
 }
 
 function truncateUtf8(text: string, maxBytes: number) {

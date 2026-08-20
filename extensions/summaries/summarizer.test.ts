@@ -31,17 +31,17 @@ test("defensively extracts fenced or surrounded JSON and normalizes Next", () =>
   );
 });
 
+test("accepts required fields alongside harmless extra output", () => {
+  assert.deepEqual(
+    parseRecapResponse('{"recap":"done","next":"nothing","extra":"ignored"}'),
+    { recap: "done", next: "nothing" },
+  );
+});
+
 test("rejects malformed or incomplete output", () => {
   assert.throws(() => parseRecapResponse("not json"), /valid recap JSON/);
   assert.throws(
     () => parseRecapResponse('{"recap":"missing next"}'),
-    /valid recap JSON/,
-  );
-  assert.throws(
-    () =>
-      parseRecapResponse(
-        '{"recap":"done","next":"nothing","extra":"not allowed"}',
-      ),
     /valid recap JSON/,
   );
 });

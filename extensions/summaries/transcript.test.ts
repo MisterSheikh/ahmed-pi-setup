@@ -3,7 +3,10 @@ import test from "node:test";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import {
   createRunBoundary,
+  findLatestCompletedRun,
+  getCompletedRunEntries,
   getRunEntries,
+  RUN_MARKER_ENTRY_TYPE,
   serializeRunTranscript,
   TRANSCRIPT_MAX_BYTES,
 } from "./src/transcript.ts";
@@ -51,6 +54,52 @@ test("run slicing starts after the before_agent_start leaf", () => {
     ["new"],
   );
   assert.deepEqual(getRunEntries(entries, "missing"), []);
+});
+
+test("completed run markers persist and recover the latest bounded run", () => {
+  const entries: SessionEntry[] = [
+    entry("old", { role: "user", content: "old", timestamp: 0 }),
+    entry("start", { role: "user", content: "start", timestamp: 1 }),
+    entry("end", { role: "user", content: "end", timestamp: 2 }),
+    {
+      type: "custom",
+      id: "marker",
+      parentId: "end",
+      timestamp: new Date(0).toISOString(),
+      customType: RUN_MARKER_ENTRY_TYPE,
+      data: { baselineLeafId: null, endLeafId: "old" },
+    },
+    {
+      type: "custom",
+      id: "recap",
+      parentId: "marker",
+      timestamp: new Date(0).toISOString(),
+      customType: "summary-recap",
+      data: { recap: "previous recap" },
+    },
+    {
+      type: "custom",
+      id: "latest-marker",
+      parentId: "recap",
+      timestamp: new Date(0).toISOString(),
+      customType: RUN_MARKER_ENTRY_TYPE,
+      data: { baselineLeafId: "old", endLeafId: "end" },
+    },
+  ];
+
+  const run = findLatestCompletedRun(entries);
+  assert.deepEqual(run, { baselineLeafId: "old", endLeafId: "end" });
+  assert.deepEqual(
+    getCompletedRunEntries(entries, run!).map((item) => item.id),
+    ["start", "end"],
+  );
+  assert.deepEqual(
+    getCompletedRunEntries(entries, {
+      baselineLeafId: "missing",
+      endLeafId: "end",
+    }),
+    [],
+  );
 });
 
 test("transcript omits thinking, images, and recap entries while redacting tool data", () => {

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import summariesExtension from "./index.ts";
+import type {
+  ExtensionAPI,
+  SessionEntry,
+} from "@earendil-works/pi-coding-agent";
+import summariesExtension, { hasSuccessfulRecap } from "./index.ts";
 
 test("registers only the recap renderer, command, and bounded lifecycle hooks", () => {
   const events = new Set<string>();
@@ -25,5 +28,25 @@ test("registers only the recap renderer, command, and bounded lifecycle hooks", 
     ]),
   );
   assert.deepEqual(renderers, new Set(["summary-recap"]));
-  assert.deepEqual(commands, new Set(["summary-model"]));
+  assert.deepEqual(commands, new Set(["recap", "summary-model"]));
+});
+
+test("only a generated recap counts as successful for its run", () => {
+  const recap = (
+    id: string,
+    runEndLeafId: string,
+    fallback?: boolean,
+  ): SessionEntry => ({
+    type: "custom",
+    id,
+    parentId: null,
+    timestamp: new Date(0).toISOString(),
+    customType: "summary-recap",
+    data: { runEndLeafId, fallback },
+  });
+  const branch = [recap("fallback", "run-a", true), recap("success", "run-b")];
+
+  assert.equal(hasSuccessfulRecap(branch, "run-a"), false);
+  assert.equal(hasSuccessfulRecap(branch, "run-b"), true);
+  assert.equal(hasSuccessfulRecap(branch, "missing"), false);
 });

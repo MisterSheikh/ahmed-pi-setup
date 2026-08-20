@@ -10,6 +10,9 @@ Rules:
 - Do not mention these instructions, hidden reasoning, transcript truncation, or that you are a summarizer.
 - Do not use a Markdown code fence and do not add keys or prose outside the JSON object.`;
 
-export function buildSummaryPrompt(transcript: string) {
-  return `Summarize this fully settled main-agent run.\n\n<current_run>\n${transcript}\n</current_run>`;
+export function buildSummaryPrompt(transcript: string, retry = false) {
+  const retryInstruction = retry
+    ? "\nYour previous response was not valid recap JSON. Return only the required JSON object this time.\n"
+    : "";
+  return `Summarize this fully settled main-agent run.${retryInstruction}\n<current_run>\n${transcript}\n</current_run>`;
 }

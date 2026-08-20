@@ -41,7 +41,6 @@ function parseCandidate(candidate: string) {
     const value: unknown = JSON.parse(candidate);
     if (
       !isRecord(value) ||
-      Object.keys(value).sort().join(",") !== "next,recap" ||
       typeof value.recap !== "string" ||
       typeof value.next !== "string"
     ) {
@@ -115,39 +114,59 @@ export function summarizeRun(options: {
       const auth = await options.modelRegistry.getApiKeyAndHeaders(model);
       if (!auth.ok) throw new SummaryError({ message: auth.error });
 
-      const response = await completeSimple(
-        model,
-        {
-          systemPrompt: SUMMARY_SYSTEM_PROMPT,
-          messages: [
-            {
-              role: "user",
-              content: buildSummaryPrompt(options.transcript),
-              timestamp: Date.now(),
-            },
-          ],
-        },
-        {
-          apiKey: auth.apiKey,
-          env: auth.env,
-          headers: auth.headers,
-          maxTokens: 1_000,
-          maxRetries: 1,
-          signal: effectSignal,
-          timeoutMs: 40_000,
-          ...reasoningOptions(options.config.reasoning),
-        },
-      );
+      let invalidResponse: SummaryError | undefined;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const response = await completeSimple(
+          model,
+          {
+            systemPrompt: SUMMARY_SYSTEM_PROMPT,
+            messages: [
+              {
+                role: "user",
+                content: buildSummaryPrompt(options.transcript, attempt > 0),
+                timestamp: Date.now(),
+              },
+            ],
+          },
+          {
+            apiKey: auth.apiKey,
+            env: auth.env,
+            headers: auth.headers,
+            maxTokens: 1_000,
+            maxRetries: 1,
+            signal: effectSignal,
+            timeoutMs: 40_000,
+            ...reasoningOptions(options.config.reasoning),
+          },
+        );
 
-      if (
-        response.stopReason === "error" ||
-        response.stopReason === "aborted"
-      ) {
-        throw new SummaryError({
-          message: response.errorMessage ?? "Summary model request failed.",
-        });
+        if (
+          response.stopReason === "error" ||
+          response.stopReason === "aborted"
+        ) {
+          throw new SummaryError({
+            message: response.errorMessage ?? "Summary model request failed.",
+          });
+        }
+
+        try {
+          return parseRecapResponse(assistantText(response.content));
+        } catch (error) {
+          invalidResponse =
+            error instanceof SummaryError
+              ? error
+              : new SummaryError({
+                  message: "The summary model did not return valid recap JSON.",
+                  cause: error,
+                });
+        }
       }
-      return parseRecapResponse(assistantText(response.content));
+
+      throw new SummaryError({
+        message:
+          "The summary model did not return valid recap JSON after two attempts.",
+        cause: invalidResponse,
+      });
     },
     catch: (cause) =>
       cause instanceof SummaryError
@@ -156,7 +175,7 @@ export function summarizeRun(options: {
             message: cause instanceof Error ? cause.message : String(cause),
             cause,
           }),
-  }).pipe(Effect.timeout("45 seconds"));
+  }).pipe(Effect.timeout("90 seconds"));
 
   return Effect.runPromise(completion, { signal: options.signal });
 }

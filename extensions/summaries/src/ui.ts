@@ -18,6 +18,7 @@ export interface RecapEntryData extends RunRecap {
   readonly provider: string;
   readonly model: string;
   readonly reasoning: ReasoningLevel;
+  readonly runEndLeafId?: string;
   readonly fallback?: boolean;
 }
 
