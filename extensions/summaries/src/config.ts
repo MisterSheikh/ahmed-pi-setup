@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Effect } from "effect";
 
 class ConfigWriteError extends Data.TaggedError("ConfigWriteError")<{
@@ -36,10 +36,10 @@ export const DEFAULT_SUMMARY_CONFIG: SummaryConfig = {
   reasoning: "medium",
 };
 
-const extensionDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
 export const PRIVATE_CONFIG_PATH = join(
-  extensionDirectory,
-  "config.private.json",
+  getAgentDir(),
+  "state",
+  "summaries.json",
 );
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import test from "node:test";
-import { DEFAULT_SUMMARY_CONFIG, parseSummaryConfig } from "./src/config.ts";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import {
+  DEFAULT_SUMMARY_CONFIG,
+  parseSummaryConfig,
+  PRIVATE_CONFIG_PATH,
+} from "./src/config.ts";
+
+test("summary config is stored outside the extension source", () => {
+  assert.equal(
+    PRIVATE_CONFIG_PATH,
+    join(getAgentDir(), "state", "summaries.json"),
+  );
+});
 
 test("summary config defaults to Codex Luna at medium reasoning", () => {
   assert.deepEqual(parseSummaryConfig(undefined), DEFAULT_SUMMARY_CONFIG);
