@@ -29,11 +29,14 @@ npm test
 
 ## Link into Pi
 
-The link script refuses to replace existing files, directories, or unrelated links. Move any existing copies of these components out of `~/.pi/agent/extensions` and `~/.pi/agent/skills` before running it.
+Install the locked dependencies first. The link script exposes the hoisted packages to each extension, then links the adopted components into Pi.
 
 ```sh
+npm ci
 ./scripts/link.sh
 ```
+
+The script refuses to replace existing files, directories, or unrelated links. Move any existing copies of these components out of `~/.pi/agent/extensions` and `~/.pi/agent/skills` before running it.
 
 Remove links created by this repository with:
 
