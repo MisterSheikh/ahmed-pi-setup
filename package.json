@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "for d in subagents background-terminals file-search ask-user summaries; do npm --prefix extensions/$d run check || exit 1; done",
-    "test": "for d in subagents background-terminals file-search summaries; do npm --prefix extensions/$d run test || exit 1; done",
+    "check": "for d in subagents background-terminals file-search ask-user summaries progress-tracker; do npm --prefix extensions/$d run check || exit 1; done",
+    "test": "for d in subagents background-terminals file-search summaries progress-tracker; do npm --prefix extensions/$d run test || exit 1; done",
     "format": "prettier --write \"extensions/**/*.{ts,json}\" package.json tsconfig.json",
     "format:check": "prettier --check \"extensions/**/*.{ts,json}\" package.json tsconfig.json"
   },
