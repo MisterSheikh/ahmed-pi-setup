@@ -20,7 +20,8 @@ export type SubagentOrigin = "model" | "btw";
  * Shared reasoning-effort scale (pi's thinking levels). Each backend maps a
  * value to its nearest native equivalent: pi uses it directly, codex
  * translates to its reasoning-effort slugs, and claude translates to thinking
- * budgets. The tool layer supplies configured defaults when omitted.
+ * budgets. Pi inherits the parent level when omitted; the tool layer supplies
+ * configured defaults for the other backends.
  */
 export const REASONING_EFFORTS = [
   "off",
@@ -55,7 +56,8 @@ export interface SpawnTask {
   /**
    * Generic model hint, interpreted per backend:
    * pi: "provider/model-id" or bare model id; claude: model alias;
-   * codex: model slug. The tool layer supplies configured defaults.
+   * codex: model slug. Pi inherits the parent model when omitted; the tool
+   * layer supplies configured defaults for the other backends.
    */
   readonly model?: string;
   /** Shared effort scale; each backend maps it to its native equivalent. */

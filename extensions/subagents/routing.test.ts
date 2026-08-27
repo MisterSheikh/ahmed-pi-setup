@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveSubagentRouting } from "./src/routing.ts";
 
-test("applies the configured defaults for each harness", () => {
+test("Pi inherits the parent model and reasoning level by default", () => {
   assert.deepEqual(resolveSubagentRouting("pi"), {
-    model: "opencode-go/deepseek-v4-flash",
-    reasoningEffort: "high",
+    model: undefined,
+    reasoningEffort: undefined,
   });
+});
+
+test("applies the configured Claude and Codex defaults", () => {
   assert.deepEqual(resolveSubagentRouting("claude"), {
     model: "claude-opus-5",
     reasoningEffort: "high",
@@ -17,18 +20,17 @@ test("applies the configured defaults for each harness", () => {
   });
 });
 
-test("DeepSeek V4 Flash accepts only high or max reasoning", () => {
-  assert.equal(
-    resolveSubagentRouting("pi", "deepseek-v4-flash", "max").reasoningEffort,
-    "max",
-  );
-  assert.throws(
-    () => resolveSubagentRouting("pi", "deepseek-v4-flash", "medium"),
-    /only support high or max/,
+test("preserves explicit Pi model and reasoning choices", () => {
+  assert.deepEqual(
+    resolveSubagentRouting("pi", "opencode-go/glm-5.3-flash", "max"),
+    {
+      model: "opencode-go/glm-5.3-flash",
+      reasoningEffort: "max",
+    },
   );
 });
 
-test("other models may use other reasoning levels", () => {
+test("preserves explicit overrides for other harnesses", () => {
   assert.equal(
     resolveSubagentRouting("codex", "gpt-5.6-sol", "low").reasoningEffort,
     "low",

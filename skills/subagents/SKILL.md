@@ -9,11 +9,13 @@ Children have isolated context, so give each a self-contained prompt with all ne
 
 ## Defaults and selection
 
-- Pi: `opencode-go/deepseek-v4-flash` at `high`. Prefer `provider/model-id`; a bare model ID must be unambiguous.
-- Claude Code: `claude-opus-5` at `high`. Claude Code must be installed and authenticated. Never select Fable unless the user explicitly requests it.
-- Codex: `gpt-5.6-sol` at `high`. The Codex CLI must be installed and authenticated. Sol is the default, not the only valid model.
+- Pi inherits the parent model and reasoning level when `model` or `reasoning_effort` is omitted. Prefer `provider/model-id`; a bare model ID must be unambiguous.
+- Claude Code defaults to `claude-opus-5` at `high`. Claude Code must be installed and authenticated. Never select Fable unless the user explicitly requests it.
+- Codex defaults to `gpt-5.6-sol` at `high`. The Codex CLI must be installed and authenticated. Sol is the default, not the only valid model.
 
-DeepSeek V4 Flash must use only `high` or `max`. For Codex, Luna may suit clearly bounded work where lower cost or speed matters. Terra remains available, but has no default recommendation because its current value proposition is unclear. The parent may choose another model or reasoning level for a concrete reason.
+For bounded independent work where speed or cost matters, consider Pi with `opencode-go/glm-5.3-flash`. It is suitable for repository inspection, straightforward implementation, tests, mechanical refactors, check diagnosis, and image files available by path. Use `high` normally; GLM-5.3-Flash accepts `low`, `high`, or `max` only.
+
+DeepSeek V4 Flash remains available and accepts `high` or `max` only. For Codex, Luna may suit clearly bounded work where lower cost or speed matters. Terra remains available, but has no default recommendation because its current value proposition is unclear. The parent may choose another model or reasoning level for a concrete reason.
 
 ## Shape the task
 
