@@ -1,17 +1,13 @@
-# Credentials and private configuration
-auth.json
+# Dependencies
+node_modules/
+
+# Private local configuration
 .env
 .env.*
-trust.json
-models*.json
 *.private.json
 
-# Pi runtime state
-sessions/
-workflows/
-bin/
-
-# Installed dependencies and generated files
-node_modules/
+# Generated and temporary files
 *.log
+*.tmp
+*.swp
 .DS_Store
