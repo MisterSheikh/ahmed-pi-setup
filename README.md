@@ -10,7 +10,6 @@ Extensions:
 - `background-terminals`
 - `context-share`, with `/excerpt [count] [--skip number]` for copying or saving selected user and agent messages
 - `file-search`
-- `progress-tracker`
 - `subagents`
 - `summaries`
 

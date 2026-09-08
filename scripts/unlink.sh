@@ -8,7 +8,6 @@ resources='extensions/ask-user
 extensions/background-terminals
 extensions/context-share
 extensions/file-search
-extensions/progress-tracker
 extensions/subagents
 extensions/summaries
 skills/background-terminals
