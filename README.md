@@ -1,6 +1,6 @@
 # ahmed-pi-setup
 
-Personal extensions and skills for Pi.
+Personal extensions, skills, and prompt templates for Pi.
 
 ## Components
 
@@ -18,6 +18,10 @@ Skills:
 
 - `background-terminals`
 - `subagents`
+
+Prompt templates:
+
+- `/handoff [output-path]`, which writes `HANDOFF.md` by default
 
 ## Context sharing
 
@@ -43,7 +47,7 @@ npm ci
 ./scripts/link.sh
 ```
 
-The script refuses to replace existing files, directories, or unrelated links. Move any existing copies of these components out of `~/.pi/agent/extensions` and `~/.pi/agent/skills` before running it.
+The script refuses to replace existing files, directories, or unrelated links. Move any existing copies of these components out of `~/.pi/agent/extensions`, `~/.pi/agent/skills`, and `~/.pi/agent/prompts` before running it.
 
 Remove links created by this repository with:
 

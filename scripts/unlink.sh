@@ -12,7 +12,8 @@ extensions/progress-tracker
 extensions/subagents
 extensions/summaries
 skills/background-terminals
-skills/subagents'
+skills/subagents
+prompts/handoff.md'
 
 dependency_source="$repo_root/node_modules"
 dependency_link="$agent_dir/extensions/node_modules"
