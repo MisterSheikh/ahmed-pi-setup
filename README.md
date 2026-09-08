@@ -8,6 +8,7 @@ Extensions:
 
 - `ask-user`
 - `background-terminals`
+- `context-share`, with `/excerpt [count] [--skip number]` for copying or saving selected user and agent messages
 - `file-search`
 - `progress-tracker`
 - `subagents`
@@ -17,6 +18,12 @@ Skills:
 
 - `background-terminals`
 - `subagents`
+
+## Context sharing
+
+Run `/excerpt` to select a contiguous range of user and agent messages from the current session branch. Each message is counted separately. The selector excludes thinking, tool calls, tool results, shell executions, summaries, and extension messages.
+
+`/excerpt 6 --skip 2` starts with six messages selected and the newest two excluded. Use the arrows or `j`/`k` to move the range endpoint, `v` or Space to reset the anchor, Enter or `c` to copy, and `s` to save a Markdown file.
 
 ## Development
 

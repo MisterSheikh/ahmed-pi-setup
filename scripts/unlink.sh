@@ -6,6 +6,7 @@ agent_dir=${PI_CODING_AGENT_DIR:-"$HOME/.pi/agent"}
 
 resources='extensions/ask-user
 extensions/background-terminals
+extensions/context-share
 extensions/file-search
 extensions/progress-tracker
 extensions/subagents
