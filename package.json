@@ -15,15 +15,16 @@
   },
   "scripts": {
     "check": "npm run check --workspaces --if-present",
-    "test": "npm run test:handoff && npm run test --workspaces --if-present",
+    "test": "npm run test:handoff && npm run test:web-link && npm run test --workspaces --if-present",
     "test:handoff": "./scripts/handoff.test.sh",
+    "test:web-link": "./scripts/web-search.test.sh",
     "format": "prettier --write \"extensions/**/*.{ts,json}\" package.json tsconfig.json",
     "format:check": "prettier --check \"extensions/**/*.{ts,json}\" package.json tsconfig.json"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.84.2",
-    "@earendil-works/pi-coding-agent": "0.84.2",
-    "@earendil-works/pi-tui": "0.84.2",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
     "@effect/platform-node-shared": "4.0.0-rc.110",
     "@effect/tsgo": "0.36.5",
     "@types/node": "26.2.0",

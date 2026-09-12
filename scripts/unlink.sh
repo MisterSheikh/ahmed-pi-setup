@@ -10,6 +10,7 @@ extensions/context-share
 extensions/file-search
 extensions/subagents
 extensions/summaries
+extensions/web-search
 skills/background-terminals
 skills/subagents
 prompts/handoff.md'
