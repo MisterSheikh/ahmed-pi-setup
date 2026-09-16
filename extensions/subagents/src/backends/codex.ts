@@ -926,6 +926,7 @@ const makeCodexSession = (
         modelList,
       );
     }
+    state.meta = { ...state.meta, reasoningLevel: state.effort };
     emit({ _tag: "MetaChanged", meta: state.meta });
     startRun(task.prompt);
 

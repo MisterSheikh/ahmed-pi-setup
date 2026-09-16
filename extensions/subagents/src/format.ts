@@ -4,6 +4,11 @@
  */
 
 import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { SubagentMeta } from "./domain.ts";
+
+export function formatModelAndReasoning(meta: SubagentMeta) {
+  return `${meta.modelLabel ?? "?"} · reasoning: ${meta.reasoningLevel ?? "?"}`;
+}
 
 export interface ContextUtilization {
   /** Current conversation context occupancy; undefined while unknown. */

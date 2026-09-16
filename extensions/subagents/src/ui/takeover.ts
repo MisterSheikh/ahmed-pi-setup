@@ -14,7 +14,10 @@ import type {
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { Input, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { formatElapsed, type SubagentSnapshot } from "../domain.ts";
-import { formatContextUtilization } from "../format.ts";
+import {
+  formatContextUtilization,
+  formatModelAndReasoning,
+} from "../format.ts";
 import type { SubagentReadModel } from "../manager.ts";
 import { buildTranscriptLines } from "./transcript.ts";
 
@@ -323,12 +326,12 @@ class SubagentDashboard implements Component {
         : theme.fg("text", snap.title);
       const left = ` ${marker} ${statusGlyph(snap, theme)} ${title} ${theme.fg("dim", snap.id)}`;
 
-      // Right: backend · model · context utilization · elapsed · status
+      // Right: backend · model · reasoning · context utilization · elapsed · status
       const utilization = formatContextUtilization(snap.usage);
       const dot = theme.fg("dim", " · ");
       const rightParts = [
         theme.fg("muted", snap.backend),
-        theme.fg("muted", snap.meta.modelLabel ?? "?"),
+        theme.fg("muted", formatModelAndReasoning(snap.meta)),
         ...(utilization ? [theme.fg("muted", utilization)] : []),
         theme.fg("muted", formatElapsed(snap)),
         statusWord(snap, theme),
@@ -520,7 +523,10 @@ class TakeoverView implements Component, Focusable {
       (this.options?.badge
         ? theme.fg("muted", ` · ${this.options.badge}`)
         : "") +
-      theme.fg("dim", ` · ${snap.backend}: ${snap.meta.modelLabel ?? "?"}`) +
+      theme.fg(
+        "dim",
+        ` · ${snap.backend}: ${formatModelAndReasoning(snap.meta)}`,
+      ) +
       (utilization ? theme.fg("dim", ` · ${utilization}`) : "");
     lines.push(truncateToWidth(header, width));
     lines.push(border);

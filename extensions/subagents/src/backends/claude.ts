@@ -318,6 +318,10 @@ const makeClaudeSession = (
       meta: {
         backend: "claude",
         modelLabel: task.model,
+        reasoningLevel:
+          task.reasoningEffort === "off"
+            ? "off"
+            : task.reasoningEffort && CLAUDE_EFFORTS[task.reasoningEffort],
         // Claude models used by this backend currently expose 200k context;
         // result.modelUsage replaces this fallback when the CLI knows better.
         contextWindow: CLAUDE_CONTEXT_WINDOW,

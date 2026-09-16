@@ -1,5 +1,36 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { formatModelAndReasoning } from "./src/format.ts";
+
+test("model display includes native reasoning levels and marks unknown metadata", () => {
+  for (const level of [
+    "off",
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]) {
+    assert.equal(
+      formatModelAndReasoning({
+        backend: "pi",
+        modelLabel: "model",
+        reasoningLevel: level,
+      }),
+      `model · reasoning: ${level}`,
+    );
+  }
+  assert.equal(
+    formatModelAndReasoning({ backend: "codex", modelLabel: "model" }),
+    "model · reasoning: ?",
+  );
+  assert.equal(
+    formatModelAndReasoning({ backend: "claude" }),
+    "? · reasoning: ?",
+  );
+});
 import {
   reconcileDashboardSelection,
   type DashboardSelection,
