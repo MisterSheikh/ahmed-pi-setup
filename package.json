@@ -15,7 +15,8 @@
   },
   "scripts": {
     "check": "npm run check --workspaces --if-present",
-    "test": "npm run test:handoff && npm run test:web-link && npm run test --workspaces --if-present",
+    "test": "npm run test:agents-link && npm run test:handoff && npm run test:web-link && npm run test --workspaces --if-present",
+    "test:agents-link": "sh ./scripts/agents-link.test.sh",
     "test:handoff": "./scripts/handoff.test.sh",
     "test:web-link": "./scripts/web-search.test.sh",
     "format": "prettier --write \"extensions/**/*.{ts,json}\" package.json tsconfig.json",

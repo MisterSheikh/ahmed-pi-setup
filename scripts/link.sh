@@ -4,7 +4,8 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 agent_dir=${PI_CODING_AGENT_DIR:-"$HOME/.pi/agent"}
 
-resources='extensions/ask-user
+resources='AGENTS.md
+extensions/ask-user
 extensions/background-terminals
 extensions/context-share
 extensions/file-search
@@ -37,7 +38,9 @@ fi
 
 while IFS= read -r relative; do
   [ -n "$relative" ] || continue
-  source_path="$repo_root/$relative"
+  source_relative="$relative"
+  [ "$relative" != 'AGENTS.md' ] || source_relative='config/AGENTS.md'
+  source_path="$repo_root/$source_relative"
   destination="$agent_dir/$relative"
 
   if [ ! -e "$source_path" ]; then
@@ -72,7 +75,9 @@ fi
 
 while IFS= read -r relative; do
   [ -n "$relative" ] || continue
-  source_path="$repo_root/$relative"
+  source_relative="$relative"
+  [ "$relative" != 'AGENTS.md' ] || source_relative='config/AGENTS.md'
+  source_path="$repo_root/$source_relative"
   destination="$agent_dir/$relative"
   mkdir -p "$(dirname -- "$destination")"
 
