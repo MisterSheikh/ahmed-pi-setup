@@ -23,6 +23,16 @@ Prompt templates:
 
 - `/handoff [output-path]`, which writes `HANDOFF.md` by default
 
+## Subagents
+
+Subagents can run through Pi or the Codex CLI, with at most four running at once. Pi children inherit the parent's model and reasoning level unless explicitly overridden. Codex defaults to `gpt-5.6-sol` at `high`.
+
+For bounded economical work, the skill and tool instructions recommend `opencode-go/deepseek-v4.1-flash` at `high` (`max` is also supported). This recommendation does not change Pi's inheritance behavior.
+
+Claude Code is disabled: it is excluded from the spawn tool's choices and the runtime backend registry, so Claude spawn requests are rejected. Its backend, dependency, routing defaults, and tests are retained for possible re-enablement. This does not restrict models available through Pi itself.
+
+Guidance lives in `skills/subagents/SKILL.md` and `extensions/subagents/src/prompt.ts`. Enabled backends are declared in `extensions/subagents/src/domain.ts` and registered in `extensions/subagents/src/runtime.ts`.
+
 ## Context sharing
 
 Run `/excerpt` to select a contiguous range of user and agent messages from the current session branch. Each message is counted separately. The selector excludes thinking, tool calls, tool results, shell executions, summaries, and extension messages.

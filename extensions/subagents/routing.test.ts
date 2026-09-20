@@ -22,9 +22,9 @@ test("applies the configured Claude and Codex defaults", () => {
 
 test("preserves explicit Pi model and reasoning choices", () => {
   assert.deepEqual(
-    resolveSubagentRouting("pi", "opencode-go/glm-5.3-flash", "max"),
+    resolveSubagentRouting("pi", "opencode-go/deepseek-v4.1-flash", "max"),
     {
-      model: "opencode-go/glm-5.3-flash",
+      model: "opencode-go/deepseek-v4.1-flash",
       reasoningEffort: "max",
     },
   );

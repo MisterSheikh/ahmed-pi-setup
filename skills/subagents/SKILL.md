@@ -1,6 +1,6 @@
 ---
 name: subagents
-description: Choose and manage Pi, Claude Code, and Codex subagents. Use when delegating work or when the user asks for subagents.
+description: Choose and manage Pi and Codex subagents. Use when delegating work or when the user asks for subagents.
 ---
 
 # Subagents
@@ -10,12 +10,11 @@ Children have isolated context, so give each a self-contained prompt with all ne
 ## Defaults and selection
 
 - Pi inherits the parent model and reasoning level when `model` or `reasoning_effort` is omitted. Prefer `provider/model-id`; a bare model ID must be unambiguous.
-- Claude Code defaults to `claude-opus-5` at `high`. Claude Code must be installed and authenticated. Never select Fable unless the user explicitly requests it.
 - Codex defaults to `gpt-5.6-sol` at `high`. The Codex CLI must be installed and authenticated. Sol is the default, not the only valid model.
 
-For bounded independent work where speed or cost matters, consider Pi with `opencode-go/glm-5.3-flash`. It is suitable for repository inspection, straightforward implementation, tests, mechanical refactors, check diagnosis, and image files available by path. Use `high` normally; GLM-5.3-Flash accepts `low`, `high`, or `max` only.
+For bounded independent work where speed or cost matters, prefer Pi with `opencode-go/deepseek-v4.1-flash`. Use it for repository inspection, straightforward implementation, tests, mechanical refactors, and check diagnosis. Use `high` normally; DeepSeek V4.1 Flash accepts `high` or `max` only. This is a recommendation, not an automatic routing override: omitted Pi model and reasoning options still inherit from the parent.
 
-DeepSeek V4 Flash remains available and accepts `high` or `max` only. For Codex, Luna may suit clearly bounded work where lower cost or speed matters. Terra remains available, but has no default recommendation because its current value proposition is unclear. The parent may choose another model or reasoning level for a concrete reason.
+For Codex, Luna may suit clearly bounded work where lower cost or speed matters. Terra remains available, but has no default recommendation because its current value proposition is unclear. The parent may choose another model or reasoning level for a concrete reason.
 
 ## Shape the task
 

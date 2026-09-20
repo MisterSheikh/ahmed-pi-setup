@@ -42,7 +42,7 @@ import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { deriveBtwTitle, isModelVisible } from "./src/by-the-way.ts";
 import {
-  BACKEND_NAMES,
+  ENABLED_BACKEND_NAMES,
   formatElapsed,
   latestText,
   REASONING_EFFORTS,
@@ -278,7 +278,7 @@ export default function (pi: ExtensionAPI) {
       name: Type.String({
         description: SUBAGENT_SPAWN_PARAMETER_DESCRIPTIONS.name,
       }),
-      harness: StringEnum(BACKEND_NAMES, {
+      harness: StringEnum(ENABLED_BACKEND_NAMES, {
         description: SUBAGENT_SPAWN_PARAMETER_DESCRIPTIONS.harness,
       }),
       working_dir: Type.Optional(

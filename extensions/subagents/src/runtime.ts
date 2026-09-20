@@ -8,15 +8,17 @@
 
 import { Cause, Exit, Layer, ManagedRuntime, type Effect } from "effect";
 import { BackendRegistry, type SubagentBackend } from "./backend.ts";
-import { claudeBackend } from "./backends/claude.ts";
 import { codexBackend } from "./backends/codex.ts";
 import { piBackend } from "./backends/pi.ts";
-import type { BackendName } from "./domain.ts";
+import { ENABLED_BACKEND_NAMES, type BackendName } from "./domain.ts";
 
 const BackendRegistryLive = Layer.sync(BackendRegistry, () => {
-  const backends: SubagentBackend[] = [piBackend, claudeBackend, codexBackend];
+  const backends = {
+    pi: piBackend,
+    codex: codexBackend,
+  } satisfies Record<(typeof ENABLED_BACKEND_NAMES)[number], SubagentBackend>;
   return new Map<BackendName, SubagentBackend>(
-    backends.map((backend) => [backend.name, backend]),
+    ENABLED_BACKEND_NAMES.map((name) => [name, backends[name]]),
   );
 });
 
