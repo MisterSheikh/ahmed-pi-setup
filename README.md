@@ -23,6 +23,10 @@ Prompt templates:
 
 - `/handoff [output-path]`, which writes `HANDOFF.md` by default
 
+Themes:
+
+- `lovelace`, matching Ghostty's built-in Lovelace palette
+
 ## Subagents
 
 Subagents can run through Pi or the Codex CLI, with at most four running at once. Pi children inherit the parent's model and reasoning level unless explicitly overridden. Codex defaults to `gpt-5.6-sol` at `high`.
@@ -67,7 +71,7 @@ npm ci
 
 The script also links `~/.pi/agent/AGENTS.md` to this repository's `config/AGENTS.md`, which supplies global instructions for Pi across projects. The repository-root `AGENTS.md` is separate: it guides development in this repo and is not linked globally.
 
-The script refuses to replace existing files, directories, or unrelated links. Move any existing copies of these components out of `~/.pi/agent/extensions`, `~/.pi/agent/skills`, and `~/.pi/agent/prompts`, and back up any existing `~/.pi/agent/AGENTS.md`, before running it. Links already pointing to the expected repo files are left unchanged.
+The script refuses to replace existing files, directories, or unrelated links. Move any existing copies of these components out of `~/.pi/agent/extensions`, `~/.pi/agent/skills`, `~/.pi/agent/prompts`, and `~/.pi/agent/themes`, and back up any existing `~/.pi/agent/AGENTS.md`, before running it. Links already pointing to the expected repo files are left unchanged.
 
 Remove links created by this repository with:
 

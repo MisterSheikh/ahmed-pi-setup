@@ -11,13 +11,38 @@ trap cleanup EXIT HUP INT TERM
 link() { PI_CODING_AGENT_DIR="$agent_dir" "$repo_root/scripts/link.sh" >"$tmp_root/link.log" 2>&1; }
 unlink() { PI_CODING_AGENT_DIR="$agent_dir" "$repo_root/scripts/unlink.sh" >"$tmp_root/unlink.log" 2>&1; }
 
-# Create the global link, accept it on repeated runs, and remove it safely.
+# Create the global links, discover the theme, accept repeated runs, and remove them safely.
 link
 [ "$(readlink "$agent_dir/AGENTS.md")" = "$repo_root/config/AGENTS.md" ]
+theme_link="$agent_dir/themes/lovelace.json"
+[ "$(readlink "$theme_link")" = "$repo_root/themes/lovelace.json" ]
+
+cd "$repo_root"
+AGENT_DIR="$agent_dir" node --input-type=module <<'NODE'
+import assert from "node:assert/strict";
+import { DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
+
+const loader = new DefaultResourceLoader({
+  cwd: process.cwd(),
+  agentDir: process.env.AGENT_DIR,
+  noExtensions: true,
+  noSkills: true,
+  noPromptTemplates: true,
+  noContextFiles: true,
+});
+await loader.reload();
+
+const { themes, diagnostics } = loader.getThemes();
+assert.deepEqual(diagnostics, []);
+assert.ok(themes.some((theme) => theme.name === "lovelace"));
+NODE
+
 link
 unlink
 [ ! -e "$agent_dir/AGENTS.md" ] && [ ! -L "$agent_dir/AGENTS.md" ]
+[ ! -e "$theme_link" ] && [ ! -L "$theme_link" ]
 [ -f "$repo_root/config/AGENTS.md" ]
+[ -f "$repo_root/themes/lovelace.json" ]
 unlink
 
 # Both scripts must refuse existing files, directories, and unrelated links.

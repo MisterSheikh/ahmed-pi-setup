@@ -14,7 +14,8 @@ extensions/summaries
 extensions/web-search
 skills/background-terminals
 skills/subagents
-prompts/handoff.md'
+prompts/handoff.md
+themes/lovelace.json'
 
 dependency_source="$repo_root/node_modules"
 dependency_link="$agent_dir/extensions/node_modules"
