@@ -1,27 +1,41 @@
 ---
 name: subagents
-description: Choose and manage Pi and Codex subagents. Use when delegating work or when the user asks for subagents.
+description: Delegate scoped work to reusable Pi workers and manage their results, questions, and lifecycle.
 ---
 
-# Subagents
+# Subagents V2
 
-Children have isolated context, so give each a self-contained prompt with all needed paths, constraints, and expected output. They have normal host permissions; use only trusted working directories.
+Workers are Pi sessions with separate conversations, not separate workspaces. They share the filesystem and normal host permissions. Use trusted working directories and partition edits to avoid collisions. Workers cannot delegate, contact peers, or ask the human directly.
 
-## Defaults and selection
+## Configuration and selection
 
-- Pi inherits the parent model and reasoning level when `model` or `reasoning_effort` is omitted. Prefer `provider/model-id`; a bare model ID must be unambiguous.
-- Codex defaults to `gpt-5.6-sol` at `high`. The Codex CLI must be installed and authenticated. Sol is the default, not the only valid model.
+Delegation starts disabled. The user configures allowed models, each model's allowed reasoning levels and optional default, an optional default model, and the active-worker limit through the `/subagent-config` popup (`/subagents config` is an alias), then explicitly enables it. The popup supports type-to-search, Space to toggle, and Right to edit a model's reasoning levels; valid changes apply immediately. Do not edit configuration to enable delegation yourself.
 
-For bounded independent work where speed or cost matters, prefer Pi with `opencode-go/deepseek-v4.1-flash`. Use it for repository inspection, straightforward implementation, tests, mechanical refactors, and check diagnosis. Use `high` normally; DeepSeek V4.1 Flash accepts `high` or `max` only. This is a recommendation, not an automatic routing override: omitted Pi model and reasoning options still inherit from the parent.
-
-For Codex, Luna may suit clearly bounded work where lower cost or speed matters. Terra remains available, but has no default recommendation because its current value proposition is unclear. The parent may choose another model or reasoning level for a concrete reason.
+- `subagent_spawn` takes `name`, `task`, and optional `model`, `reasoning`, and `working_dir`.
+- Use an allowed, available `provider/model-id`. There is no harness selector: every worker runs through Pi.
+- You, the parent agent, choose the model and reasoning level from the current allowed combinations supplied in your instructions. Workers do not choose their own settings.
+- An omitted model uses only the configured default model. Omitted reasoning uses only the selected model's own configured default. If that default is absent, supply an explicit allowed level. Settings never inherit from the parent or another model and never silently fall back.
+- For bounded economical work, consider `opencode-go/deepseek-v4.1-flash` at `high` (`max` is also supported), but only when allowed by the user's configuration. This recommendation is not a built-in default.
 
 ## Shape the task
 
-- Delegate according to the actual task rather than fixed roles, and do not delegate when the parent can finish faster.
-- Keep the scope narrow. State explicitly whether the child may edit files.
-- Bound reviews to the relevant files or diff and specify the desired findings. Prefer a quick bounded review unless the user requests a deep audit.
+Delegate when it helps, not merely to fill available slots. The initial limit is four active workers; the user may change it.
 
-## Running children
+Give each worker an ordinary text brief containing the task, boundaries, relevant facts or file references, and expected output. Parent conversation history is not copied. State whether edits are allowed, keep scope narrow, and prefer a focused review over an unsolicited audit.
 
-At most four subagents run at once. Results return automatically, so continue useful work after spawning. Use `subagent_wait` only when the result blocks progress. Use `subagent_check`, `subagent_list`, and `subagent_cancel` as needed. Use `/subagents` to inspect or take over a run.
+## Control and reuse
+
+- Continue useful work after `subagent_spawn`; results arrive automatically.
+- Use `subagent_followup` with `id` and `task` for a related assignment or an answer to an idle worker. Its conversation is retained. Use a fresh worker for unrelated work.
+- Use `subagent_steer` with `id` and `message` to correct active work. Follow-ups reject busy workers; steering rejects idle workers.
+- Use `subagent_interrupt` with `ids` to stop work while preserving conversations. Inspect reported stop failures.
+- Use `subagent_list` for status. Supply `id` to inspect a worker, optional `task_id` for an earlier result, or `transcript: true` for a bounded transcript. Full-session references accompany long output.
+- Use `subagent_wait` with `ids` and optional `mode: "any" | "all"` (default `all`) only when results block progress. It suspends without repeated model calls and selects the tasks current when the wait starts. Questions, blockers, failures, and unexpected interruptions return early. Cancelling a wait leaves workers running.
+
+Workers use `subagent_report` to send FYI updates without waking the parent, or questions/blockers that pause until a follow-up. These are not completion results. Workers must finish required background processes and inspect their output before completing; they retain an active slot while waiting.
+
+## Human controls and resume
+
+`/subagents` opens the live dashboard. Enter inspects without taking control; **t** starts exclusive inline takeover. Home/End jump to the transcript start/bottom; End resumes following. In takeover, Enter sends, Ctrl+X interrupts, and Ctrl+T or Escape hands back and closes. Configuration is separate: `/subagent-config`. Do not assign or steer a worker during takeover.
+
+Disabling delegation, reloading, changing parent sessions, or exiting Pi stops workers and preserves conversations. Parent resume restores workers without restarting tasks; use explicit follow-ups. Worker conversations stay outside normal resume lists. Cross-branch worker rewind/cloning is unsupported. Existing legacy subagent sessions are not migrated.

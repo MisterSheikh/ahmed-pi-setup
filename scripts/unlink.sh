@@ -4,12 +4,14 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 agent_dir=${PI_CODING_AGENT_DIR:-"$HOME/.pi/agent"}
 
+# Include the legacy link for safe cleanup of pre-V2 installations.
 resources='AGENTS.md
 extensions/ask-user
 extensions/background-terminals
 extensions/context-share
 extensions/file-search
 extensions/subagents
+extensions/subagents-v2
 extensions/summaries
 extensions/web-search
 skills/background-terminals

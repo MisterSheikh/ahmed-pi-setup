@@ -9,7 +9,7 @@ extensions/ask-user
 extensions/background-terminals
 extensions/context-share
 extensions/file-search
-extensions/subagents
+extensions/subagents-v2
 extensions/summaries
 extensions/web-search
 skills/background-terminals
@@ -20,6 +20,20 @@ themes/lovelace.json'
 dependency_source="$repo_root/node_modules"
 dependency_link="$agent_dir/extensions/node_modules"
 errors=0
+legacy_link="$agent_dir/extensions/subagents"
+legacy_source="$repo_root/extensions/subagents"
+
+# Adopt V2 without leaving two extensions registering the same tools. Only
+# remove the exact legacy link owned by this repo, after all checks succeed.
+if [ -L "$legacy_link" ]; then
+  if [ "$(readlink "$legacy_link")" != "$legacy_source" ]; then
+    printf 'Refusing unrelated legacy subagents link: %s\n' "$legacy_link" >&2
+    errors=1
+  fi
+elif [ -e "$legacy_link" ]; then
+  printf 'Refusing non-link legacy subagents path: %s\n' "$legacy_link" >&2
+  errors=1
+fi
 
 if [ ! -d "$dependency_source" ]; then
   printf 'Missing dependencies: run npm ci in %s\n' "$repo_root" >&2
@@ -65,6 +79,11 @@ $resources
 EOF
 
 [ "$errors" -eq 0 ] || exit "$errors"
+
+if [ -L "$legacy_link" ]; then
+  rm "$legacy_link"
+  printf 'Retired legacy subagents link: %s\n' "$legacy_link"
+fi
 
 mkdir -p "$agent_dir/extensions"
 if [ -L "$dependency_link" ]; then

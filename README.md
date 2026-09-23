@@ -10,7 +10,7 @@ Extensions:
 - `background-terminals`
 - `context-share`, with `/excerpt [count] [--skip number]` for copying or saving selected user and agent messages
 - `file-search`
-- `subagents`
+- `subagents-v2`
 - `summaries`
 - `web-search`, providing the `web` tool for search, page reading, links, and text lookup through your existing Pi OpenAI login
 
@@ -29,13 +29,13 @@ Themes:
 
 ## Subagents
 
-Subagents can run through Pi or the Codex CLI, with at most four running at once. Pi children inherit the parent's model and reasoning level unless explicitly overridden. Codex defaults to `gpt-5.6-sol` at `high`.
+Subagents V2 uses reusable Pi workers with separate conversations in the shared workspace. Delegation starts disabled. Run `/subagent-config` for a searchable popup (`/subagents config` remains an alias): Space toggles models; Right opens that model's supported reasoning levels and optional default. Changes apply immediately. Choose an optional default model and the active-worker limit (initially four), then explicitly enable delegation. There is no parent-model inheritance or silent fallback.
 
-For bounded economical work, the skill and tool instructions recommend `opencode-go/deepseek-v4.1-flash` at `high` (`max` is also supported). This recommendation does not change Pi's inheritance behavior.
+The parent can spawn, follow up, steer, interrupt, inspect, and wait for workers. Workers report progress, questions, and blockers to the parent. `/subagents` opens a live dashboard: Enter inspects a worker, Home/End navigate its transcript, and **t** starts exclusive inline takeover. Chat communications label sender, receiver, action, and task, with semantic colours and expandable bodies. Parent resume restores workers without restarting their tasks; worker conversations stay outside normal resume discovery.
 
-Claude Code is disabled: it is excluded from the spawn tool's choices and the runtime backend registry, so Claude spawn requests are rejected. Its backend, dependency, routing defaults, and tests are retained for possible re-enablement. This does not restrict models available through Pi itself.
+For economical work, the skill suggests `opencode-go/deepseek-v4.1-flash` at `high` (`max` is also supported), only when permitted by user configuration. Every worker runs through Pi, including models supplied by the `openai-codex` provider; the Codex CLI is not used.
 
-Guidance lives in `skills/subagents/SKILL.md` and `extensions/subagents/src/prompt.ts`. Enabled backends are declared in `extensions/subagents/src/domain.ts` and registered in `extensions/subagents/src/runtime.ts`.
+See [`skills/subagents/SKILL.md`](skills/subagents/SKILL.md) and [`extensions/subagents-v2/README.md`](extensions/subagents-v2/README.md). The old `extensions/subagents/` implementation and sessions are retained for rollback, not loaded or migrated. V2 uses workspace-local Pi 0.87.1 dependencies; existing root dependencies are unchanged.
 
 ## Context sharing
 
@@ -70,6 +70,8 @@ npm ci
 ```
 
 The script also links `~/.pi/agent/AGENTS.md` to this repository's `config/AGENTS.md`, which supplies global instructions for Pi across projects. The repository-root `AGENTS.md` is separate: it guides development in this repo and is not linked globally.
+
+The script switches an exact repo-owned legacy `extensions/subagents` link to `extensions/subagents-v2`, so only one subagents extension is discovered. Stop active workers first and run `/reload` afterward.
 
 The script refuses to replace existing files, directories, or unrelated links. Move any existing copies of these components out of `~/.pi/agent/extensions`, `~/.pi/agent/skills`, `~/.pi/agent/prompts`, and `~/.pi/agent/themes`, and back up any existing `~/.pi/agent/AGENTS.md`, before running it. Links already pointing to the expected repo files are left unchanged.
 

@@ -81,9 +81,9 @@ test("production runtime rejects Claude without starting a child", async () => {
   }
 });
 
-test("skill and tool guidance recommend DeepSeek without advertising Claude or GLM", async () => {
+test("legacy skill and tool guidance recommend DeepSeek without advertising Claude or GLM", async () => {
   const skill = await readFile(
-    new URL("../../skills/subagents/SKILL.md", import.meta.url),
+    new URL("./SKILL.legacy.md", import.meta.url),
     "utf8",
   );
   const prompt = [
