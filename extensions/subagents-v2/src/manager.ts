@@ -379,15 +379,38 @@ export class SubagentManager {
     return this.followupInternal(this.require(id), brief, false);
   }
 
+  private steerStateError(id: string, task: WorkerTask | undefined) {
+    const state = task
+      ? `current task "${task.id}" has status "${task.status}"`
+      : "the worker has no current task";
+    const guidance =
+      task && isActiveStatus(task.status)
+        ? "Wait until it is working before steering, or until it stops before using subagent_followup."
+        : `Use subagent_followup with id "${id}" and a task to start new work; subagent_steer cannot reach an idle worker.`;
+    return new Error(
+      `Worker "${id}" is not actively working: ${state}. ${guidance}`,
+    );
+  }
+
   async steer(id: string, message: string, human = false) {
     const worker = this.require(id);
     if (!human) this.assertParentControl(worker);
     const task = taskOf(worker);
     if (!task || task.status !== "working")
-      throw new Error(`Worker "${id}" is not actively working.`);
+      throw this.steerStateError(id, task);
     const session = this.sessions.get(id);
     if (!session) throw new Error(`Worker "${id}" is still starting.`);
-    await session.steer(message);
+    try {
+      await session.steer(message);
+    } catch (error) {
+      // `session.steer` can reject because the run settled while the call was
+      // in flight. Re-read the live task and only replace the provider error
+      // when it is now settled; a still-active failure stays verbatim.
+      const current = taskOf(worker);
+      if (!current || isStoppedStatus(current.status))
+        throw this.steerStateError(id, current);
+      throw error;
+    }
   }
 
   async interrupt(id: string, human = false) {

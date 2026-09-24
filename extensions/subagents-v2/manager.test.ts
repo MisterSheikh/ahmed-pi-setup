@@ -20,6 +20,10 @@ class FakeProviderSession implements WorkerSession {
   closeError?: Error;
   starts: string[] = [];
   steers: string[] = [];
+  /** When set, an active `steer()` rejects with this error unchanged. */
+  steerError?: Error;
+  /** When true, `steer()` settles the run and then rejects (settle race). */
+  settleOnSteer = false;
   items: SessionTranscriptItem[] = [];
   /** Live snapshot surfaced by `presentation()`; undefined exercises the
    * transcript fallback used by legacy factories. */
@@ -46,6 +50,12 @@ class FakeProviderSession implements WorkerSession {
 
   async steer(message: string) {
     if (!this.active) throw new Error("idle");
+    if (this.steerError) throw this.steerError;
+    if (this.settleOnSteer) {
+      this.active = false;
+      this.callbacks.onSettled({ result: "settled during steer" });
+      throw new Error("idle");
+    }
     this.steers.push(message);
   }
 
@@ -281,6 +291,38 @@ test("a completed worker accepts a related follow-up in the same conversation", 
   await manager.dispose();
 });
 
+test("starting and stopping steering errors do not mislabel a busy worker as idle", async () => {
+  const h = harness();
+  h.provider.holdCreates = true;
+  const worker = h.spawn();
+  await assert.rejects(
+    h.manager.steer(worker.id, "correction"),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /status "starting"/);
+      assert.match(error.message, /Wait until/);
+      assert.doesNotMatch(error.message, /cannot reach an idle worker/);
+      return true;
+    },
+  );
+  h.provider.releaseOne();
+  await tick();
+  h.provider.sessions.get(worker.id)!.cleanupError("still stopping");
+  await assert.rejects(
+    h.manager.steer(worker.id, "correction"),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /status "stopping"/);
+      assert.match(
+        error.message,
+        /until it stops before using subagent_followup/,
+      );
+      return true;
+    },
+  );
+  await h.manager.dispose();
+});
+
 test("steering and interruption affect only the selected active worker", async () => {
   const { manager, provider, spawn } = harness();
   const one = spawn("one");
@@ -292,6 +334,130 @@ test("steering and interruption affect only the selected active worker", async (
   const interrupted = await manager.interrupt(one.id);
   assert.equal(interrupted.task.status, "interrupted");
   assert.equal(manager.get(two.id)?.tasks[0]?.status, "working");
+  await manager.dispose();
+});
+
+test("steering an idle worker names its task and points to follow-up", async () => {
+  const { manager, provider, persisted, spawn } = harness();
+  const worker = spawn("idle-target");
+  await tick();
+  const session = provider.sessions.get(worker.id)!;
+  session.complete("finished before steering");
+  const taskId = manager.require(worker.id).currentTaskId!;
+  const persistedBefore = persisted.length;
+  const startsBefore = session.starts.length;
+
+  await assert.rejects(manager.steer(worker.id, "too late"), (error: Error) => {
+    assert.match(error.message, /not actively working/);
+    assert.match(error.message, new RegExp(worker.id));
+    assert.match(error.message, new RegExp(taskId));
+    assert.match(error.message, /completed/);
+    assert.match(error.message, /subagent_followup/);
+    assert.match(error.message, new RegExp(`id "${worker.id}"`));
+    return true;
+  });
+  assert.deepEqual(session.steers, []);
+  assert.equal(manager.require(worker.id).tasks.length, 1);
+  assert.equal(session.starts.length, startsBefore);
+  assert.equal(manager.activeCount(), 0);
+  assert.equal(
+    persisted.length,
+    persistedBefore,
+    "a rejected steer never persists or starts work",
+  );
+  await manager.dispose();
+});
+
+test("steering a worker with no current task reports the idle state", async () => {
+  const restored: WorkerRecord = {
+    id: "sa-restored-idle",
+    name: "idle-restored",
+    cwd: process.cwd(),
+    model: "fake/model",
+    reasoning: "low",
+    createdAt: 0,
+    updatedAt: 0,
+    takenOver: false,
+    tasks: [],
+  };
+  const { manager, persisted } = harness(4, [restored]);
+  const persistedBefore = persisted.length;
+
+  await assert.rejects(manager.steer(restored.id, "nudge"), (error: Error) => {
+    assert.match(error.message, /not actively working/);
+    assert.match(error.message, /no current task/);
+    assert.match(error.message, /subagent_followup/);
+    return true;
+  });
+  assert.equal(persisted.length, persistedBefore);
+  assert.equal(manager.require(restored.id).tasks.length, 0);
+  await manager.dispose();
+});
+
+test("a settle during steering replaces the provider error with idle guidance", async () => {
+  const { manager, provider, spawn } = harness();
+  const worker = spawn("race-target");
+  await tick();
+  const session = provider.sessions.get(worker.id)!;
+  const taskId = manager.require(worker.id).currentTaskId!;
+  const startsBefore = session.starts.length;
+  session.settleOnSteer = true;
+
+  await assert.rejects(
+    manager.steer(worker.id, "lands after settle"),
+    (error: Error) => {
+      assert.notEqual(error.message, "idle");
+      assert.match(error.message, /not actively working/);
+      assert.match(error.message, new RegExp(taskId));
+      assert.match(error.message, /completed/);
+      assert.match(error.message, /subagent_followup/);
+      return true;
+    },
+  );
+  assert.deepEqual(session.steers, []);
+  assert.equal(manager.require(worker.id).tasks.length, 1);
+  assert.equal(session.starts.length, startsBefore);
+  assert.equal(manager.activeCount(), 0);
+  await manager.dispose();
+});
+
+test("a real active steering failure is preserved and leaves the task working", async () => {
+  const { manager, provider, spawn } = harness();
+  const worker = spawn("active-failure");
+  await tick();
+  const session = provider.sessions.get(worker.id)!;
+  session.steerError = new Error("provider rejected steering");
+
+  await assert.rejects(
+    manager.steer(worker.id, "will fail"),
+    /provider rejected steering/,
+  );
+  assert.equal(manager.get(worker.id)?.tasks[0]?.status, "working");
+  assert.equal(manager.activeCount(), 1);
+  assert.equal(manager.require(worker.id).tasks.length, 1);
+  assert.equal(session.starts.length, 1);
+  assert.deepEqual(session.steers, []);
+  await manager.dispose();
+});
+
+test("takeover rejection precedes idle steering guidance", async () => {
+  const { manager, provider, spawn } = harness();
+  const worker = spawn("taken-over-idle");
+  await tick();
+  const session = provider.sessions.get(worker.id)!;
+  session.complete("finished");
+  manager.beginTakeover(worker.id);
+
+  await assert.rejects(
+    manager.steer(worker.id, "parent nudge"),
+    (error: Error) => {
+      assert.match(error.message, /exclusive human takeover/);
+      assert.doesNotMatch(error.message, /subagent_followup/);
+      return true;
+    },
+  );
+  assert.deepEqual(session.steers, []);
+  assert.equal(manager.require(worker.id).tasks.length, 1);
   await manager.dispose();
 });
 

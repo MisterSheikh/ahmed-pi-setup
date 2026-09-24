@@ -96,6 +96,8 @@ export interface CommunicationRecord {
   /** True when this record's task is no longer the worker's current task. */
   historical?: boolean;
   body?: string;
+  /** Optional concise preview; expansion still shows the full bounded body. */
+  summary?: string;
 }
 
 /** Structural subset of the active Pi theme used for communication output. */
@@ -285,7 +287,9 @@ function collapsedPreview(
   theme: CommunicationTheme,
   color: ThemeColor,
 ): string {
-  const text = sanitizeTerminalText(record.body ?? "").trimEnd();
+  const text = sanitizeTerminalText(
+    record.summary ?? record.body ?? "",
+  ).trimEnd();
   if (!text) return theme.fg("dim", "(no content)");
   const lines = text.split("\n");
   const shown = lines
@@ -298,6 +302,8 @@ function collapsedPreview(
         `... ${lines.length - PREVIEW_LINES} more lines (expand)`,
       ),
     );
+  if (record.summary !== undefined && record.summary !== record.body)
+    shown.push(theme.fg("dim", "Full result: expand or inspect."));
   return shown.join("\n");
 }
 
@@ -476,6 +482,8 @@ export function decodeCommunication(
     action,
     body: text ?? "",
   };
+  const summary = asString(value.summary);
+  if (summary) record.summary = summary;
   const status = asString(value.status);
   const currentStatus = asString(value.currentStatus);
   if (workerId) record.workerId = workerId;

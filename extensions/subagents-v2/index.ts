@@ -22,6 +22,10 @@ import {
   describeWorker,
   formatTaskResult,
   formatTaskResults,
+  formatTaskNotification,
+  formatTaskNotifications,
+  formatFyiNotification,
+  sortTaskNotifications,
   formatTranscript,
   sanitizeTerminalText,
 } from "./src/format.ts";
@@ -30,6 +34,7 @@ import { PiWorkerSessionFactory } from "./src/pi-session.ts";
 import { makeState, restoreState, STATE_ENTRY_TYPE } from "./src/state.ts";
 import {
   THINKING_LEVELS,
+  isActiveStatus,
   type SubagentsConfig,
   type ThinkingLevel,
 } from "./src/types.ts";
@@ -292,10 +297,67 @@ export default function subagentsV2(pi: ExtensionAPI) {
     );
   };
 
+  const flushFyi = () => {
+    if (!context || shuttingDown) return;
+    for (const result of delivery.drainFyi()) {
+      const { worker, task } = result;
+      const current = manager?.get(worker.id);
+      const latest = current && currentTask(current);
+      // Keep progress local until a safe delivery boundary. Once handed to Pi,
+      // a queued custom message cannot be retracted by this extension.
+      if (
+        !latest ||
+        latest.id !== task.id ||
+        !isActiveStatus(latest.status) ||
+        latest.report?.kind !== "fyi" ||
+        latest.report.at !== task.report?.at ||
+        latest.report.message !== task.report?.message
+      )
+        continue;
+      const content = formatFyiNotification(worker, task);
+      try {
+        pi.sendMessage(
+          {
+            customType: "subagents-v2-fyi",
+            content,
+            display: true,
+            details: {
+              workerId: worker.id,
+              taskId: task.id,
+              communication: {
+                direction: "incoming",
+                action: "FYI",
+                workerId: worker.id,
+                name: worker.name,
+                taskId: task.id,
+                status: latest.status,
+                body: sanitizeTerminalText(latest.report.message),
+                summary: content,
+              } satisfies CommunicationRecord,
+            },
+          },
+          { triggerTurn: false },
+        );
+      } catch (error) {
+        delivery.deferFyi(result);
+        reportError(
+          `Could not add worker update to the parent session: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  };
+
   const flush = () => {
-    const results = delivery.drain();
-    if (results.length === 0 || !context || shuttingDown) return;
-    const content = formatTaskResults(results);
+    if (!context || shuttingDown) return;
+    // Passive updates are appended before the single result-triggered turn.
+    flushFyi();
+    const pending = sortTaskNotifications(delivery.drain());
+    const results = pending.slice(0, 32);
+    // Keep overflow pending rather than truncating away task identities. The
+    // triggered parent turn supplies the next settled delivery boundary.
+    for (const result of pending.slice(32)) delivery.defer(result);
+    if (results.length === 0) return;
+    const content = formatTaskNotifications(results);
     try {
       pi.sendMessage(
         {
@@ -303,12 +365,18 @@ export default function subagentsV2(pi: ExtensionAPI) {
           content,
           display: true,
           details: {
-            communications: results.map((result) =>
-              resultRecord(
+            communications: results.map((result) => ({
+              ...resultRecord(
                 result,
                 Math.max(1, Math.floor(48_000 / results.length)),
               ),
-            ),
+              summary: formatTaskNotification(
+                result.worker,
+                result.task,
+                undefined,
+                { includeHeading: false },
+              ),
+            })),
             results: results.map(({ worker, task }) => ({
               workerId: worker.id,
               taskId: task.id,
@@ -318,6 +386,8 @@ export default function subagentsV2(pi: ExtensionAPI) {
         },
         { deliverAs: "followUp", triggerTurn: true },
       );
+      // sendMessage is fire-and-forget: handoff is not proof of inspection.
+      // Only explicit inspection/wait records an acknowledged result revision.
     } catch (error) {
       for (const result of results) delivery.defer(result);
       reportError(
@@ -332,39 +402,10 @@ export default function subagentsV2(pi: ExtensionAPI) {
     if (context.isIdle()) flush();
   };
 
-  const onFyi = ({ worker, task }: TaskResult) => {
-    if (!task.report) return;
-    const safeName = sanitizeTerminalText(worker.name);
-    const safeMessage = sanitizeTerminalText(task.report.message);
-    const content = `FYI from ${worker.id} task ${task.id} “${safeName}”: ${safeMessage}`;
-    try {
-      pi.sendMessage(
-        {
-          customType: "subagents-v2-fyi",
-          content,
-          display: true,
-          details: {
-            workerId: worker.id,
-            taskId: task.id,
-            communication: {
-              direction: "incoming",
-              action: "FYI",
-              workerId: worker.id,
-              name: worker.name,
-              taskId: task.id,
-              status: task.status,
-              body: safeMessage,
-            } satisfies CommunicationRecord,
-          },
-        },
-        { triggerTurn: false },
-      );
-    } catch (error) {
-      reportError(
-        `Could not add worker update to the parent session: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    ui?.notify(`${worker.id} “${safeName}”: ${safeMessage}`, "info");
+  const onFyi = (result: TaskResult) => {
+    if (shuttingDown || !context) return;
+    delivery.deferFyi(result);
+    if (context.isIdle()) flushFyi();
   };
 
   const createManager = (
@@ -499,6 +540,9 @@ export default function subagentsV2(pi: ExtensionAPI) {
       selectionGuidance(config, ctx.modelRegistry);
   });
 
+  // Preserve useful mid-run progress without handing stale FYIs to Pi's queue:
+  // Pi flushes passive messages after turn_end handlers, without continuation.
+  pi.on("turn_end", flushFyi);
   pi.on("agent_settled", flush);
 
   const branchControlBlocked = (operation: "tree navigation" | "fork") => {
@@ -825,7 +869,7 @@ export default function subagentsV2(pi: ExtensionAPI) {
     name: "subagent_list",
     label: "List Workers",
     description:
-      "List workers and task status, or inspect a worker's current or earlier task result and bounded transcript.",
+      "List workers and task status, or inspect a worker's current or earlier task result and bounded transcript. Inspecting a task acknowledges that result so it is not announced again; a roster lookup does not.",
     parameters: Type.Object({
       id: Type.Optional(
         Type.String({ description: "Optional worker ID to inspect." }),
@@ -907,6 +951,9 @@ export default function subagentsV2(pi: ExtensionAPI) {
         taskId: task?.id,
         status: task?.status,
       };
+      // Only acknowledge after the requested result/transcript was built
+      // successfully. A failed inspection must leave its notification pending.
+      if (task) delivery.consume([{ worker, task }]);
       return {
         content: [{ type: "text", text }],
         details,

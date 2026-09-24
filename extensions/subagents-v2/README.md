@@ -29,6 +29,10 @@ Configuration lives at `<agent-dir>/subagents-v2/config.json`. Version 2 stores 
 
 Workers receive workspace instructions and the parent's ordinary text brief, not parent conversation history. They cannot delegate, contact peers, or ask the human directly. Their `subagent_report` tool sends `fyi` without waking the parent, or sends a `question`/`blocked` report and pauses until a follow-up.
 
+Automatic notifications use short excerpts with an action label and a task-specific inspection hint. Questions, blockers, failures, and interruptions come before routine completions. Expand a notification or inspect its task for detail. Successful inspection and waiting acknowledge the result revision returned; roster lookups do not. New results or changed errors can still notify.
+
+While the parent is busy, FYIs coalesce to the latest per task and are dropped if that task stops before delivery. They flush at the next model-turn boundary, so useful progress can still reach an ongoing parent run. Earlier reports remain in the worker's saved Pi transcript. FYIs never wake the parent. Idle-worker steering returns current status and suggests an explicit follow-up; it never starts one automatically.
+
 Starting, working, and stopping workers consume capacity. Idle workers do not. A worker retains its slot while required background processes finish; the independent background-terminal extension is unchanged.
 
 ## Persistence and boundaries

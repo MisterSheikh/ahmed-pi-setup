@@ -27,12 +27,14 @@ Give each worker an ordinary text brief containing the task, boundaries, relevan
 
 - Continue useful work after `subagent_spawn`; results arrive automatically.
 - Use `subagent_followup` with `id` and `task` for a related assignment or an answer to an idle worker. Its conversation is retained. Use a fresh worker for unrelated work.
-- Use `subagent_steer` with `id` and `message` to correct active work. Follow-ups reject busy workers; steering rejects idle workers.
+- Use `subagent_steer` with `id` and `message` to correct active work. Follow-ups reject busy workers; steering rejects idle workers and suggests an explicit follow-up. If a worker finishes before steering reaches it, inspect the returned status and choose the next action; steering never becomes a new task automatically.
 - Use `subagent_interrupt` with `ids` to stop work while preserving conversations. Inspect reported stop failures.
-- Use `subagent_list` for status. Supply `id` to inspect a worker, optional `task_id` for an earlier result, or `transcript: true` for a bounded transcript. Full-session references accompany long output.
+- Use `subagent_list` for status. Supply `id` to inspect a worker, optional `task_id` for an earlier result, or `transcript: true` for a bounded transcript. Full-session references accompany long output. Successful task inspection acknowledges that result revision and suppresses its pending automatic notification; a roster-only lookup does not.
 - Use `subagent_wait` with `ids` and optional `mode: "any" | "all"` (default `all`) only when results block progress. It suspends without repeated model calls and selects the tasks current when the wait starts. Questions, blockers, failures, and unexpected interruptions return early. Cancelling a wait leaves workers running.
 
-Workers use `subagent_report` to send FYI updates without waking the parent, or questions/blockers that pause until a follow-up. These are not completion results. Workers must finish required background processes and inspect their output before completing; they retain an active slot while waiting.
+Automatic results are concise excerpts, not complete reports. Inspect the named task before relying on omitted details. Unacknowledged questions, blockers, failures, and interruptions are delivered before routine completions.
+
+Workers use `subagent_report` to send FYI updates without waking the parent, or questions/blockers that pause until a follow-up. These are not completion results. While the parent is busy, pending FYIs coalesce to the latest per task at the next model-turn boundary and are suppressed if the task stops first; the saved worker transcript retains earlier reports. Workers must finish required background processes and inspect their output before completing; they retain an active slot while waiting.
 
 ## Human controls and resume
 

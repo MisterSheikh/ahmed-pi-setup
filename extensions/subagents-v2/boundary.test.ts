@@ -30,6 +30,11 @@ import type {
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { createDeferredDelivery } from "./src/delivery.ts";
+import {
+  NOTIFICATION_BATCH_CHARS,
+  NOTIFICATION_ENTRY_CHARS,
+  NOTIFICATION_FYI_CHARS,
+} from "./src/format.ts";
 import { LiveDashboard } from "./src/live-ui.ts";
 import type {
   ConfigPicker,
@@ -263,6 +268,8 @@ class FakePi {
   readonly activeToolSets: string[][] = [];
   readonly entries: Array<{ customType: string; data: unknown }> = [];
   readonly sendMessages: Array<{ message: unknown; options: unknown }> = [];
+  /** When true, the next `sendMessage` throws synchronously and resets. */
+  failNextSendMessage = false;
   private active = ["read", "bash"];
 
   readonly api = {
@@ -293,6 +300,10 @@ class FakePi {
       this.entries.push({ customType, data });
     },
     sendMessage: (message: unknown, options?: unknown) => {
+      if (this.failNextSendMessage) {
+        this.failNextSendMessage = false;
+        throw new Error("synthetic send failure");
+      }
       this.sendMessages.push({ message, options });
     },
   } as unknown as ExtensionAPI;
@@ -401,7 +412,11 @@ class BoundaryFakeSession implements WorkerSession {
     this.closed = true;
   }
 
+  /** When set, `transcript()` throws to exercise failed inspections. */
+  transcriptError: Error | undefined;
+
   transcript(): SessionTranscriptItem[] {
+    if (this.transcriptError) throw this.transcriptError;
     return this.starts.map((text) => ({ role: "user", text }));
   }
 
@@ -411,6 +426,10 @@ class BoundaryFakeSession implements WorkerSession {
 
   settle(result: string): void {
     this.callbacks.onSettled({ result });
+  }
+
+  fail(error: string): void {
+    this.callbacks.onSettled({ result: "", error });
   }
 }
 
@@ -475,6 +494,22 @@ async function callTool(
     `call-${name}`,
     params,
     undefined,
+    undefined,
+    ctx,
+  )) as unknown as ToolResult;
+}
+
+async function callToolWithSignal(
+  pi: FakePi,
+  name: string,
+  params: Record<string, unknown>,
+  signal: AbortSignal,
+  ctx: ExtensionCommandContext,
+): Promise<ToolResult> {
+  return (await definition(pi, name).execute(
+    `call-${name}`,
+    params,
+    signal,
     undefined,
     ctx,
   )) as unknown as ToolResult;
@@ -913,7 +948,7 @@ test("a forked branch with another owner's workers rejects control instead of mu
 // FYI and deferred result delivery
 // ---------------------------------------------------------------------------
 
-test("fyi information reaches the parent without waking it", async () => {
+test("an idle fyi is a non-waking custom message without a duplicate toast", async () => {
   writeConfig(ENABLED_CONFIG);
   const { pi, ctx, ui } = makeHarness();
   await start(pi, ctx);
@@ -928,26 +963,43 @@ test("fyi information reaches the parent without waking it", async () => {
   await flushImmediate();
 
   fakeSessions.require(workerId).report("fyi", "halfway there");
+  await flushImmediate();
 
-  assert.ok(
-    ui.notifies.some(({ message }) => message.includes("halfway there")),
-    "fyi should surface a UI notification",
-  );
-  const fyiMessages = pi.sendMessages.filter(({ message }) =>
-    JSON.stringify(message).includes("halfway there"),
-  );
-  assert.ok(
-    fyiMessages.length > 0,
-    "expected fyi information in a parent context message, not only ui.notify",
-  );
   assert.equal(
-    pi.sendMessages.some(
-      ({ options }) =>
-        (options as { triggerTurn?: boolean } | undefined)?.triggerTurn ===
-        true,
-    ),
+    ui.notifies.some(({ message }) => message.includes("halfway there")),
+    false,
+    "the fyi must not also add a ui.notify toast",
+  );
+  const fyiMessage = pi.sendMessages.find(
+    ({ message }) =>
+      (message as { customType?: string }).customType === "subagents-v2-fyi",
+  );
+  assert.ok(fyiMessage, "an idle fyi is sent immediately as a custom message");
+  const content = (fyiMessage.message as { content?: string }).content ?? "";
+  assert.match(content, /FYI\/progress: halfway there/);
+  assert.match(content, /No action requested/);
+  assert.match(content, /Inspect: subagent_list/);
+  assert.ok(content.length <= NOTIFICATION_FYI_CHARS);
+  assert.equal(
+    (fyiMessage.options as { triggerTurn?: boolean } | undefined)?.triggerTurn,
     false,
     "fyi must not trigger an automatic parent wake",
+  );
+  const communication = (
+    fyiMessage.message as {
+      details?: { communication?: { action?: string; body?: string } };
+    }
+  ).details?.communication;
+  assert.equal(communication?.action, "FYI");
+  assert.equal(
+    communication?.body,
+    "halfway there",
+    "the DTO keeps the full fyi body",
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
   );
 });
 
@@ -1269,6 +1321,690 @@ test("fyi messages carry one communication DTO and keep flat identity fields", a
   );
 });
 
+test("pending fyi updates stay local while busy, coalesce per task, and flush without waking", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const id = workerIdFrom(
+    await callTool(
+      pi,
+      "subagent_spawn",
+      { name: "progress", task: "work" },
+      ctx,
+    ),
+  );
+  await flushImmediate();
+
+  fakeSessions.require(id).report("fyi", "first progress");
+  fakeSessions.require(id).report("fyi", "latest progress");
+  assert.equal(
+    pi.sendMessages.length,
+    0,
+    "a busy parent must not receive fyi updates",
+  );
+
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+
+  const fyiMessages = pi.sendMessages.filter(
+    ({ message }) =>
+      (message as { customType?: string }).customType === "subagents-v2-fyi",
+  );
+  assert.equal(fyiMessages.length, 1, "only the latest fyi per task is sent");
+  const content =
+    (fyiMessages[0]!.message as { content?: string }).content ?? "";
+  assert.match(content, /latest progress/);
+  assert.doesNotMatch(content, /first progress/);
+  assert.equal(
+    pi.sendMessages.some(
+      ({ options }) =>
+        (options as { triggerTurn?: boolean } | undefined)?.triggerTurn ===
+        true,
+    ),
+    false,
+    "an fyi-only flush must not wake the parent",
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("a settled task drops its pending fyi and suppresses the fyi body in automatic content", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const id = workerIdFrom(
+    await callTool(
+      pi,
+      "subagent_spawn",
+      { name: "settler", task: "work" },
+      ctx,
+    ),
+  );
+  await flushImmediate();
+
+  fakeSessions.require(id).report("fyi", "TRANSIENT_FYI");
+  fakeSessions.require(id).settle("FINAL_RESULT");
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+
+  assert.equal(
+    pi.sendMessages.filter(
+      ({ message }) =>
+        (message as { customType?: string }).customType === "subagents-v2-fyi",
+    ).length,
+    0,
+    "a settled task must not deliver its stale fyi",
+  );
+  const results = pi.sendMessages.find(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  );
+  assert.ok(results, "the settled result must still be delivered");
+  const content = (results.message as { content?: string }).content ?? "";
+  assert.match(content, /FINAL_RESULT/);
+  assert.doesNotMatch(content, /TRANSIENT_FYI/);
+  // The full DTO body keeps the settled task's report for explicit inspection.
+  const communication = (
+    results.message as {
+      details?: { communications?: Array<{ body?: string }> };
+    }
+  ).details?.communications?.[0];
+  assert.match(String(communication?.body), /TRANSIENT_FYI/);
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("a roster-only list does not acknowledge a pending result", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const id = workerIdFrom(
+    await callTool(pi, "subagent_spawn", { name: "roster", task: "work" }, ctx),
+  );
+  await flushImmediate();
+  fakeSessions.require(id).settle("ROSTER_RESULT");
+
+  const roster = await callTool(pi, "subagent_list", {}, ctx);
+  assert.match(resultText(roster), new RegExp(id));
+
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  const results = pi.sendMessages.filter(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  );
+  assert.equal(
+    results.length,
+    1,
+    "a roster lookup must leave the result pending",
+  );
+  assert.match(
+    (results[0]!.message as { content?: string }).content ?? "",
+    /ROSTER_RESULT/,
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("inspecting an active task does not suppress its later completed notification", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const id = workerIdFrom(
+    await callTool(pi, "subagent_spawn", { name: "active", task: "work" }, ctx),
+  );
+  await flushImmediate();
+
+  // Acknowledges only the active revision, not the future completed one.
+  const active = await callTool(pi, "subagent_list", { id }, ctx);
+  assert.match(resultText(active), new RegExp(id));
+
+  fakeSessions.require(id).settle("LATE_RESULT");
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  const results = pi.sendMessages.filter(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  );
+  assert.equal(
+    results.length,
+    1,
+    "the completed revision must still be delivered",
+  );
+  assert.match(
+    (results[0]!.message as { content?: string }).content ?? "",
+    /LATE_RESULT/,
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("a failed transcript inspection does not acknowledge the pending result", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const id = workerIdFrom(
+    await callTool(pi, "subagent_spawn", { name: "broken", task: "work" }, ctx),
+  );
+  await flushImmediate();
+  fakeSessions.require(id).settle("PENDING_RESULT");
+  fakeSessions.require(id).transcriptError = new Error(
+    "transcript read failed",
+  );
+
+  await assert.rejects(
+    callTool(pi, "subagent_list", { id, transcript: true }, ctx),
+    /transcript read failed/,
+  );
+
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  const results = pi.sendMessages.filter(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  );
+  assert.equal(
+    results.length,
+    1,
+    "a failed inspection must leave the result pending",
+  );
+  assert.match(
+    (results[0]!.message as { content?: string }).content ?? "",
+    /PENDING_RESULT/,
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("automatic result content is terse while details keep the full body and a collapsed summary", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const spawned = await callTool(
+    pi,
+    "subagent_spawn",
+    { name: "verbose", task: "work" },
+    ctx,
+  );
+  const id = workerIdFrom(spawned);
+  const taskId = (spawned.details as { taskId: string }).taskId;
+  await flushImmediate();
+  const longResult = `FULL_${"x".repeat(1_500)}_END`;
+  fakeSessions.require(id).settle(longResult);
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+
+  const message = pi.sendMessages.find(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  )!.message as {
+    content?: string;
+    details?: {
+      communications?: Array<{
+        body?: string;
+        summary?: string;
+        taskId?: string;
+      }>;
+    };
+  };
+  const content = message.content ?? "";
+  assert.match(content, /Result excerpt:/);
+  assert.match(content, /Action:/);
+  assert.match(
+    content,
+    /Inspect: subagent_list \{ id: "[^"]+", task_id: "[^"]+" \}/,
+  );
+  assert.ok(
+    content.length <= NOTIFICATION_ENTRY_CHARS,
+    `automatic content should be a single bounded entry: ${content.length}`,
+  );
+  assert.ok(
+    !content.includes("_END"),
+    "the automatic content is a bounded excerpt",
+  );
+
+  const communication = message.details?.communications?.[0];
+  assert.ok(communication);
+  assert.equal(communication.taskId, taskId);
+  assert.ok(
+    String(communication.body).includes("_END"),
+    "details keep the full body",
+  );
+  assert.ok(communication.summary, "details carry a collapsed summary");
+  assert.match(communication.summary!, /Result excerpt:/);
+  assert.ok(
+    !communication.summary!.includes("_END"),
+    "the summary stays terse",
+  );
+  assert.notEqual(communication.summary, communication.body);
+
+  const renderer = pi.messageRenderers.get("subagents-v2-results");
+  assert.ok(renderer);
+  const collapsedComponent = renderer(
+    message,
+    { expanded: false },
+    renderTheme,
+  );
+  assert.ok(collapsedComponent);
+  const collapsed = rendered(collapsedComponent);
+  assert.match(collapsed, /Result excerpt:/);
+  assert.ok(!collapsed.includes("_END"));
+  const expandedComponent = renderer(message, { expanded: true }, renderTheme);
+  assert.ok(expandedComponent);
+  const expanded = rendered(expandedComponent);
+  assert.ok(expanded.includes("_END"));
+
+  const inspected = resultText(
+    await callTool(pi, "subagent_list", { id, task_id: taskId }, ctx),
+  );
+  assert.ok(inspected.includes("_END"), "inspection returns the full body");
+  assert.doesNotMatch(inspected, /Result excerpt:/);
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("automatic batches order attention states before completions", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const spawn = async (name: string) =>
+    workerIdFrom(
+      await callTool(pi, "subagent_spawn", { name, task: name }, ctx),
+    );
+  const completed = await spawn("completed");
+  const question = await spawn("question");
+  const blocked = await spawn("blocked");
+  const failed = await spawn("failed");
+  await flushImmediate();
+
+  fakeSessions.require(completed).settle("COMPLETED_RESULT");
+  fakeSessions.require(question).report("question", "QUESTION_MARK");
+  fakeSessions.require(question).settle("");
+  fakeSessions.require(blocked).report("blocked", "BLOCKED_MARK");
+  fakeSessions.require(blocked).settle("");
+  fakeSessions.require(failed).fail("FAILED_MARK");
+
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+
+  const results = pi.sendMessages.find(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  );
+  assert.ok(results);
+  const content = (results.message as { content?: string }).content ?? "";
+  const positions = [
+    "QUESTION_MARK",
+    "BLOCKED_MARK",
+    "FAILED_MARK",
+    "COMPLETED_RESULT",
+  ].map((marker) => {
+    const index = content.indexOf(marker);
+    assert.ok(index >= 0, `${marker} missing from automatic content`);
+    return index;
+  });
+  assert.deepEqual(
+    [...positions].sort((a, b) => a - b),
+    positions,
+    "question, blocked, failed, then completed",
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("reusing a worker keeps earlier task identities and historical status in the batch", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const spawned = await callTool(
+    pi,
+    "subagent_spawn",
+    { name: "reuse-ids", task: "first" },
+    ctx,
+  );
+  const id = workerIdFrom(spawned);
+  const firstTaskId = (spawned.details as { taskId: string }).taskId;
+  await flushImmediate();
+  fakeSessions.require(id).settle("FIRST_ID_RESULT");
+
+  const followed = await callTool(
+    pi,
+    "subagent_followup",
+    { id, task: "second" },
+    ctx,
+  );
+  const secondTaskId = (followed.details as { taskId: string }).taskId;
+  await flushImmediate();
+  fakeSessions.require(id).settle("SECOND_ID_RESULT");
+
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+
+  const message = pi.sendMessages.find(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  )!.message as {
+    content?: string;
+    details?: { communications?: Array<{ taskId?: string }> };
+  };
+  const content = message.content ?? "";
+  assert.ok(content.includes(firstTaskId), "the earlier task id is preserved");
+  assert.ok(content.includes(secondTaskId));
+  assert.ok(content.includes("FIRST_ID_RESULT"));
+  assert.ok(content.includes("SECOND_ID_RESULT"));
+  const taskIds = (message.details?.communications ?? []).map(
+    (record) => record.taskId,
+  );
+  assert.deepEqual(
+    new Set(taskIds),
+    new Set([firstTaskId, secondTaskId]),
+    "each DTO keeps its own task id",
+  );
+
+  const renderer = pi.messageRenderers.get("subagents-v2-results");
+  assert.ok(renderer);
+  const renderedBatch = renderer(message, { expanded: false }, renderTheme);
+  assert.ok(renderedBatch);
+  const text = rendered(renderedBatch);
+  assert.match(text, /historical/);
+  assert.match(text, /worker now: completed/);
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("earlier unresolved question, blocker, and failure survive worker reuse and stay deliverable", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const spawned = await callTool(
+    pi,
+    "subagent_spawn",
+    { name: "reuse-attention", task: "first" },
+    ctx,
+  );
+  const id = workerIdFrom(spawned);
+  const firstTaskId = (spawned.details as { taskId: string }).taskId;
+  await flushImmediate();
+  fakeSessions.require(id).report("question", "STILL_OPEN");
+  fakeSessions.require(id).settle("");
+
+  const blockedFollow = await callTool(
+    pi,
+    "subagent_followup",
+    { id, task: "second" },
+    ctx,
+  );
+  const secondTaskId = (blockedFollow.details as { taskId: string }).taskId;
+  await flushImmediate();
+  fakeSessions.require(id).report("blocked", "STILL_BLOCKED");
+  fakeSessions.require(id).settle("");
+
+  const failedFollow = await callTool(
+    pi,
+    "subagent_followup",
+    { id, task: "third" },
+    ctx,
+  );
+  const thirdTaskId = (failedFollow.details as { taskId: string }).taskId;
+  await flushImmediate();
+  fakeSessions.require(id).fail("STILL_FAILED");
+
+  const finalFollow = await callTool(
+    pi,
+    "subagent_followup",
+    { id, task: "fourth" },
+    ctx,
+  );
+  const fourthTaskId = (finalFollow.details as { taskId: string }).taskId;
+  await flushImmediate();
+  fakeSessions.require(id).settle("FINAL_DONE");
+
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+
+  const content =
+    (
+      pi.sendMessages.find(
+        ({ message }) =>
+          (message as { customType?: string }).customType ===
+          "subagents-v2-results",
+      )!.message as { content?: string }
+    ).content ?? "";
+  for (const marker of [
+    "STILL_OPEN",
+    "STILL_BLOCKED",
+    "STILL_FAILED",
+    "FINAL_DONE",
+  ])
+    assert.match(content, new RegExp(marker));
+  for (const taskId of [firstTaskId, secondTaskId, thirdTaskId, fourthTaskId])
+    assert.ok(
+      content.includes(taskId),
+      `the batch must preserve ${taskId} across reuse`,
+    );
+  assert.ok(
+    content.indexOf("STILL_OPEN") < content.indexOf("STILL_BLOCKED") &&
+      content.indexOf("STILL_BLOCKED") < content.indexOf("STILL_FAILED") &&
+      content.indexOf("STILL_FAILED") < content.indexOf("FINAL_DONE"),
+    "unresolved attention stays ahead of the later completion",
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("a synchronous send failure retries the batch without consuming it", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx, ui } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const id = workerIdFrom(
+    await callTool(pi, "subagent_spawn", { name: "retry", task: "work" }, ctx),
+  );
+  await flushImmediate();
+  fakeSessions.require(id).settle("RETRY_RESULT");
+  idle = true;
+
+  pi.failNextSendMessage = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  const resultsAfterFailure = pi.sendMessages.filter(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  );
+  assert.equal(
+    resultsAfterFailure.length,
+    0,
+    "the failed send must not deliver",
+  );
+  assert.ok(
+    ui.notifies.some(
+      ({ type, message }) =>
+        type === "error" && /Could not deliver/.test(message),
+    ),
+    "the send failure must be reported",
+  );
+
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  const delivered = pi.sendMessages.filter(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  );
+  assert.equal(delivered.length, 1, "the retry delivers exactly once");
+  assert.match(
+    (delivered[0]!.message as { content?: string }).content ?? "",
+    /RETRY_RESULT/,
+  );
+
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  assert.equal(
+    pi.sendMessages.filter(
+      ({ message }) =>
+        (message as { customType?: string }).customType ===
+        "subagents-v2-results",
+    ).length,
+    1,
+    "a consumed batch is not delivered again",
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("a cancelled wait leaves the pending result for automatic delivery", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const id = workerIdFrom(
+    await callTool(pi, "subagent_spawn", { name: "cancel", task: "work" }, ctx),
+  );
+  await flushImmediate();
+
+  const controller = new AbortController();
+  controller.abort(new Error("wait cancelled"));
+  await assert.rejects(
+    callToolWithSignal(
+      pi,
+      "subagent_wait",
+      { ids: [id], mode: "all" },
+      controller.signal,
+      ctx,
+    ),
+    /cancelled/,
+  );
+
+  fakeSessions.require(id).settle("CANCEL_RESULT");
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  const results = pi.sendMessages.filter(
+    ({ message }) =>
+      (message as { customType?: string }).customType ===
+      "subagents-v2-results",
+  );
+  assert.equal(
+    results.length,
+    1,
+    "a cancelled wait must not acknowledge the task",
+  );
+  assert.match(
+    (results[0]!.message as { content?: string }).content ?? "",
+    /CANCEL_RESULT/,
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
+test("a flush delivers at most 32 result tasks and keeps the overflow for the next boundary", async () => {
+  writeConfig(ENABLED_CONFIG);
+  let idle = false;
+  const { pi, ctx } = makeHarness({ idle: () => idle });
+  await start(pi, ctx);
+  const ids: string[] = [];
+  for (let index = 0; index < 33; index++) {
+    const spawned = await callTool(
+      pi,
+      "subagent_spawn",
+      { name: `bulk-${index}`, task: `t${index}` },
+      ctx,
+    );
+    const id = workerIdFrom(spawned);
+    ids.push(id);
+    await flushImmediate();
+    fakeSessions.require(id).settle(`BULK_${index}_END`);
+  }
+  assert.equal(pi.sendMessages.length, 0, "busy results stay queued");
+
+  idle = true;
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  const batches = () =>
+    pi.sendMessages.filter(
+      ({ message }) =>
+        (message as { customType?: string }).customType ===
+        "subagents-v2-results",
+    );
+  assert.equal(batches().length, 1);
+  const firstContent =
+    (batches()[0]!.message as { content?: string }).content ?? "";
+  assert.ok(
+    firstContent.length <= NOTIFICATION_BATCH_CHARS,
+    "the automatic batch stays within the batch budget",
+  );
+  for (let index = 0; index < 32; index++)
+    assert.ok(
+      firstContent.includes(`BULK_${index}_END`),
+      `batch one is missing BULK_${index}_END`,
+    );
+  assert.ok(
+    !firstContent.includes("BULK_32_END"),
+    "the 33rd task must remain queued",
+  );
+
+  await pi.emit("agent_settled", { type: "agent_settled" }, ctx);
+  assert.equal(
+    batches().length,
+    2,
+    "the overflow flushes on the next boundary",
+  );
+  assert.match(
+    (batches()[1]!.message as { content?: string }).content ?? "",
+    /BULK_32_END/,
+  );
+  await pi.emit(
+    "session_shutdown",
+    { type: "session_shutdown", reason: "quit" },
+    ctx,
+  );
+});
+
 test("registered message renderers render both result batches and fyi updates", async () => {
   writeConfig(ENABLED_CONFIG);
   let idle = false;
@@ -1283,6 +2019,7 @@ test("registered message renderers render both result batches and fyi updates", 
     ),
   );
   await flushImmediate();
+  idle = true;
   fakeSessions.require(id).report("fyi", "FYI_BODY");
 
   const fyiRenderer = pi.messageRenderers.get("subagents-v2-fyi");
@@ -1733,4 +2470,73 @@ test("deferred delivery deduplicates by worker/task key and drops consumed resul
   delivery.defer(first);
   delivery.clear();
   assert.deepEqual(delivery.drain(), [], "clear must empty pending results");
+});
+
+test("an acknowledged task revision stays consumed while a new revision on the reused worker is delivered", () => {
+  const delivery = createDeferredDelivery();
+  const acknowledged = taskResult("w1", "w1-t1");
+  delivery.defer(acknowledged);
+  delivery.consume([acknowledged]);
+  delivery.defer(acknowledged); // a stale snapshot must not resurface
+  assert.deepEqual(
+    delivery.drain(),
+    [],
+    "the seen revision must not be re-delivered after reuse",
+  );
+
+  const reused = taskResult("w1", "w1-t2");
+  delivery.defer(reused);
+  assert.deepEqual(
+    delivery.drain().map(({ task }) => task.id),
+    ["w1-t2"],
+    "a new task on the reused worker is still delivered",
+  );
+});
+
+test("consuming an older task revision does not erase a newer pending revision", () => {
+  const delivery = createDeferredDelivery();
+  const newer = taskResult("w1", "w1-t1");
+  delivery.defer(newer);
+
+  const older = taskResult("w1", "w1-t1");
+  older.task.status = "working";
+  older.task.result = undefined;
+  delivery.consume([older]);
+
+  assert.deepEqual(
+    delivery.drain().map(({ task }) => task.status),
+    ["completed"],
+    "the newer completed revision remains queued",
+  );
+});
+
+test("fyi delivery coalesces the latest report per task and is dropped by a lifecycle result", () => {
+  const delivery = createDeferredDelivery();
+  const first = taskResult("w1", "w1-t1");
+  first.task.status = "working";
+  first.task.result = undefined;
+  first.task.report = { kind: "fyi", message: "first", at: 1 };
+  delivery.deferFyi(first);
+
+  const latest = taskResult("w1", "w1-t1");
+  latest.task.status = "working";
+  latest.task.result = undefined;
+  latest.task.report = { kind: "fyi", message: "latest", at: 2 };
+  delivery.deferFyi(latest);
+
+  assert.deepEqual(
+    delivery.drainFyi().map(({ task }) => task.report?.message),
+    ["latest"],
+    "only the latest fyi per task is queued",
+  );
+
+  delivery.deferFyi(latest);
+  const settled = taskResult("w1", "w1-t1");
+  settled.task.report = { kind: "fyi", message: "latest", at: 2 };
+  delivery.defer(settled);
+  assert.deepEqual(
+    delivery.drainFyi(),
+    [],
+    "a lifecycle result supersedes the pending fyi",
+  );
 });

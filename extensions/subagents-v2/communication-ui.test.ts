@@ -218,6 +218,32 @@ test("collapsed preview is bounded and expanded output reveals the full sanitize
   assert.doesNotMatch(expanded, /\u001b\[31m/);
 });
 
+test("automatic summaries stay concise while expansion retains the result body", () => {
+  const { theme } = stubTheme();
+  const record = decodeCommunication({
+    ...incoming(),
+    summary: "Short preview",
+    body: "FULL_RESULT_DETAIL",
+  });
+  assert.ok(record);
+  const collapsed = render(
+    renderCommunication(record, { expanded: false }, theme),
+  );
+  assert.match(collapsed, /Short preview/);
+  assert.match(collapsed, /expand or inspect/);
+  assert.doesNotMatch(collapsed, /FULL_RESULT_DETAIL/);
+  const expanded = render(
+    renderCommunication(record, { expanded: true }, theme),
+  );
+  assert.match(expanded, /FULL_RESULT_DETAIL/);
+  assert.doesNotMatch(expanded, /Short preview/);
+  const malformed = decodeCommunication({
+    ...incoming(),
+    summary: { injected: true },
+  });
+  assert.equal(malformed?.summary, undefined);
+});
+
 test("bodies hang under a coloured gutter beneath their header", () => {
   const lines = render(
     renderCommunication(
