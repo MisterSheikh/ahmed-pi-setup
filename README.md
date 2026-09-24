@@ -11,6 +11,7 @@ Extensions:
 - `context-share`, with `/excerpt [count] [--skip number]` for copying or saving selected user and agent messages
 - `file-search`
 - `subagents-v2`
+- `subscription-usage`, integrating subscription quota and extension statuses into Pi's compact footer
 - `summaries`
 - `web-search`, providing the `web` tool for search, page reading, links, and text lookup through your existing Pi OpenAI login
 
@@ -25,7 +26,7 @@ Prompt templates:
 
 Themes:
 
-- `lovelace`, matching Ghostty's built-in Lovelace palette
+- `lovelace`, matching Ghostty's built-in Lovelace palette with higher-contrast faded text
 
 ## Subagents
 

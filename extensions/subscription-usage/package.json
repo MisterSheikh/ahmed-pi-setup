@@ -1,0 +1,9 @@
+{
+  "name": "subscription-usage",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit -p .",
+    "test": "node --experimental-strip-types --test *.test.ts"
+  }
+}

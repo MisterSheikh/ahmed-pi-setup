@@ -10,6 +10,7 @@ extensions/background-terminals
 extensions/context-share
 extensions/file-search
 extensions/subagents-v2
+extensions/subscription-usage
 extensions/summaries
 extensions/web-search
 skills/background-terminals
