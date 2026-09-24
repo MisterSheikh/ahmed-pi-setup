@@ -9,4 +9,3 @@
 - Validate with npm run format:check, npm run check, and npm test.
 - When adding or removing linked components, update scripts/link.sh and scripts/unlink.sh.
 - Do not change credentials, settings, sessions, or other local Pi state unless requested.
-- `docs/` and `research/` are symlinks into a separate internal notes repo. Read/update them when relevant; search explicitly with `rg --no-ignore -L` or `fd --no-ignore -L`. Leave notes changes unstaged and uncommitted for human review; do not stage, commit, push, or change that repo's Git configuration unless explicitly requested.
