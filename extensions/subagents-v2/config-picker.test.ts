@@ -250,7 +250,7 @@ test("Space toggles an allowed model without leaving the model list", async () =
   );
 });
 
-test("cursor stays on the toggled model after re-sorting", async () => {
+test("toggling a model preserves its cursor and list position", async () => {
   const { picker } = setup({
     config: {
       allowedModels: ["fake/basic", "fake/reasoner"],
@@ -266,6 +266,10 @@ test("cursor stays on the toggled model after re-sorting", async () => {
   assert.deepEqual(picker.config.allowedModels, ["fake/reasoner"]);
   const rendered = picker.render(80).join("\n");
   assert.match(rendered, /→ \[ \] fake\/basic/);
+  assert.ok(
+    rendered.indexOf("fake/basic") < rendered.indexOf("fake/reasoner"),
+    "changing allowed state must not reorder visible models",
+  );
 });
 
 test("reasoning screen lists only real supported levels", async () => {
@@ -403,6 +407,33 @@ test("rejected writes revert and surface the error without claiming success", as
   assert.match(rendered, /write failed/);
 });
 
+test("saving and error status use a fixed row without moving the popup", async () => {
+  let finishWrite!: () => void;
+  const pendingWrite = new Promise<void>((resolve) => {
+    finishWrite = resolve;
+  });
+  const { picker } = setup({ onChange: async () => pendingWrite });
+  const before = picker.render(80);
+
+  picker.handleInput(KEY.space);
+  const saving = picker.render(80);
+  assert.equal(saving.length, before.length);
+  assert.equal(
+    saving.findIndex((line) => line.includes("Subagents V2 configuration")),
+    before.findIndex((line) => line.includes("Subagents V2 configuration")),
+  );
+  assert.match(saving.join("\n"), /Saving…/);
+
+  finishWrite();
+  await picker.flush();
+  const settled = picker.render(80);
+  assert.equal(settled.length, before.length);
+  assert.equal(
+    settled.findIndex((line) => line.includes("Subagents V2 configuration")),
+    before.findIndex((line) => line.includes("Subagents V2 configuration")),
+  );
+});
+
 test("Escape returns from subviews and closes settings", async () => {
   const { picker, dones } = setup();
   await openModels(picker);
@@ -504,6 +535,15 @@ test("the popup draws a box whose side borders join the top and bottom edges", a
   for (const width of [8, 15, 30, 60, 120]) check("models", width);
   await press(picker, KEY.right);
   for (const width of [8, 15, 30, 60, 120]) check("reasoning", width);
+});
+
+test("the frame has equal one-cell horizontal and vertical insets", () => {
+  const { picker } = setup();
+  const lines = picker.render(60);
+  assert.match(lines[1], /^│ +│$/, "blank inset below the top border");
+  assert.match(lines.at(-2)!, /^│ +│$/, "blank inset above the bottom border");
+  assert.ok(lines[2].startsWith("│ "), "one-cell left inset");
+  assert.ok(lines[2].endsWith(" │"), "one-cell right inset");
 });
 
 test("the model search has no placeholder and uses the default prompt", async () => {

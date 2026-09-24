@@ -79,8 +79,9 @@ const MAX_REASONING_ROWS = 8;
 const MAX_LINES = 24;
 /** Columns consumed by the box's left and right border. */
 const BORDER_WIDTH = 2;
-/** Horizontal padding between the border and the content. */
+/** Horizontal and vertical padding between the frame and its content. */
 const PADDING_X = 1;
+const PADDING_Y = 1;
 /** Below this width the box frame is dropped so tiny terminals stay usable. */
 const MIN_FRAME_WIDTH = 6;
 
@@ -249,9 +250,9 @@ export class ConfigPicker<T extends ConfigPickerConfig = ConfigPickerConfig>
     const contentWidth = framed
       ? Math.max(1, safeWidth - BORDER_WIDTH - PADDING_X * 2)
       : safeWidth;
-    // The frame itself occupies two rows of the terminal-height budget.
+    // The frame and its vertical inset consume rows from the height budget.
     const budget = framed
-      ? Math.max(1, this.rowBudget() - BORDER_WIDTH)
+      ? Math.max(1, this.rowBudget() - BORDER_WIDTH - PADDING_Y * 2)
       : this.rowBudget();
     const content = this.renderScreen(contentWidth, budget);
     const rendered = (framed ? this.frame(safeWidth, content) : content).map(
@@ -274,10 +275,11 @@ export class ConfigPicker<T extends ConfigPickerConfig = ConfigPickerConfig>
     const side = t.fg("accent", "│");
     const top = t.fg("accent", `┌${"─".repeat(inner)}┐`);
     const bottom = t.fg("accent", `└${"─".repeat(inner)}┘`);
-    const body = lines.map(
-      (line) => `${side}${pad}${padToWidth(line, contentWidth)}${pad}${side}`,
-    );
-    return [top, ...body, bottom];
+    const framedLine = (line: string) =>
+      `${side}${pad}${padToWidth(line, contentWidth)}${pad}${side}`;
+    const inset = Array.from({ length: PADDING_Y }, () => framedLine(""));
+    const body = lines.map(framedLine);
+    return [top, ...inset, ...body, ...inset, bottom];
   }
 
   /** Total lines the popup may occupy, derived from the terminal height. */
@@ -330,8 +332,7 @@ export class ConfigPicker<T extends ConfigPickerConfig = ConfigPickerConfig>
     const header = [t.fg("accent", t.bold("Subagents V2 configuration")), ""];
     const footer = [
       "",
-      ...(this.error ? [t.fg("error", safeText(this.error))] : []),
-      ...(this.saving ? [t.fg("dim", "Saving…")] : []),
+      this.statusLine(),
       t.fg(
         "dim",
         fitHint(
@@ -410,12 +411,7 @@ export class ConfigPicker<T extends ConfigPickerConfig = ConfigPickerConfig>
             "↑↓ · Space · → · Esc back",
             "Esc back",
           );
-    const footer = [
-      "",
-      ...(this.error ? [t.fg("error", safeText(this.error))] : []),
-      ...(this.saving ? [t.fg("dim", "Saving…")] : []),
-      t.fg("dim", hint),
-    ];
+    const footer = ["", this.statusLine(), t.fg("dim", hint)];
     const { header: head, footer: foot } = this.fitChrome(
       header,
       footer,
@@ -507,8 +503,7 @@ export class ConfigPicker<T extends ConfigPickerConfig = ConfigPickerConfig>
     ];
     const footer = [
       "",
-      ...(this.error ? [t.fg("error", safeText(this.error))] : []),
-      ...(this.saving ? [t.fg("dim", "Saving…")] : []),
+      this.statusLine(),
       t.fg(
         "dim",
         fitHint(
@@ -887,7 +882,17 @@ export class ConfigPicker<T extends ConfigPickerConfig = ConfigPickerConfig>
         supported: model ? [...this.supported(model)] : [],
       };
     });
+    const previousOrder = new Map(
+      this.allEntries.map((entry, index) => [entry.key, index]),
+    );
     entries.sort((a, b) => {
+      const aPrevious = previousOrder.get(a.key);
+      const bPrevious = previousOrder.get(b.key);
+      if (aPrevious !== undefined && bPrevious !== undefined) {
+        return aPrevious - bPrevious;
+      }
+      if (aPrevious !== undefined) return -1;
+      if (bPrevious !== undefined) return 1;
       const aAllowed = this.draft.allowedModels.includes(a.key) ? 0 : 1;
       const bAllowed = this.draft.allowedModels.includes(b.key) ? 0 : 1;
       if (aAllowed !== bAllowed) return aAllowed - bAllowed;
@@ -999,6 +1004,13 @@ export class ConfigPicker<T extends ConfigPickerConfig = ConfigPickerConfig>
     this.closed = true;
     await this.flush();
     this.done();
+  }
+
+  /** A permanent footer slot prevents centered overlays moving during writes. */
+  private statusLine(): string {
+    if (this.error) return this.theme.fg("error", safeText(this.error));
+    if (this.saving) return this.theme.fg("dim", "Saving…");
+    return "";
   }
 
   private refreshRender(): void {
