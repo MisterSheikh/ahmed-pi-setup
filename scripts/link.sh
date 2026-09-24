@@ -8,6 +8,7 @@ resources='AGENTS.md
 extensions/ask-user
 extensions/background-terminals
 extensions/context-share
+extensions/copy-response
 extensions/file-search
 extensions/subagents-v2
 extensions/subscription-usage
