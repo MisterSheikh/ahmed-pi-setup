@@ -16,6 +16,8 @@ link
 [ "$(readlink "$agent_dir/AGENTS.md")" = "$repo_root/config/AGENTS.md" ]
 theme_link="$agent_dir/themes/lovelace.json"
 [ "$(readlink "$theme_link")" = "$repo_root/themes/lovelace.json" ]
+new_theme_link="$agent_dir/themes/tomorrow-night-80s.json"
+[ "$(readlink "$new_theme_link")" = "$repo_root/themes/tomorrow-night-80s.json" ]
 
 cd "$repo_root"
 AGENT_DIR="$agent_dir" node --input-type=module <<'NODE'
@@ -35,14 +37,17 @@ await loader.reload();
 const { themes, diagnostics } = loader.getThemes();
 assert.deepEqual(diagnostics, []);
 assert.ok(themes.some((theme) => theme.name === "lovelace"));
+assert.ok(themes.some((theme) => theme.name === "tomorrow-night-80s"));
 NODE
 
 link
 unlink
 [ ! -e "$agent_dir/AGENTS.md" ] && [ ! -L "$agent_dir/AGENTS.md" ]
 [ ! -e "$theme_link" ] && [ ! -L "$theme_link" ]
+[ ! -e "$new_theme_link" ] && [ ! -L "$new_theme_link" ]
 [ -f "$repo_root/config/AGENTS.md" ]
 [ -f "$repo_root/themes/lovelace.json" ]
+[ -f "$repo_root/themes/tomorrow-night-80s.json" ]
 unlink
 
 # Both scripts must refuse existing files, directories, and unrelated links.

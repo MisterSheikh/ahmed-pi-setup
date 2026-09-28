@@ -27,6 +27,7 @@ Prompt templates:
 Themes:
 
 - `lovelace`, matching Ghostty's built-in Lovelace palette with higher-contrast faded text
+- `tomorrow-night-80s`, based on the Tomorrow Night Eighties palette
 
 ## Subagents
 

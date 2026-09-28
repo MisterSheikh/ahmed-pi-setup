@@ -19,7 +19,8 @@ extensions/web-search
 skills/background-terminals
 skills/subagents
 prompts/handoff.md
-themes/lovelace.json'
+themes/lovelace.json
+themes/tomorrow-night-80s.json'
 
 dependency_source="$repo_root/node_modules"
 dependency_link="$agent_dir/extensions/node_modules"
